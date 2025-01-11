@@ -1,5 +1,6 @@
 ---
-disqus: emacs-lsp
+template: comment.html
+root_file: docs/tutorials/how-to-turn-off.md
 ---
 
 # A guide on disabling/enabling lsp-mode features

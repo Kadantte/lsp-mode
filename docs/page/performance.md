@@ -1,3 +1,6 @@
+---
+root_file: docs/page/performance.md
+---
 Performance
 ===========
 
@@ -32,15 +35,19 @@ Again the emacs default is too low 4k considering that the some of the language 
 ### Use `plists` for deserialization.
 `lsp-mode` can be compiled in 2 modes `plist` and `hash-table` based `lsp-use-plists` flag. `plist`s provide better performance in deserialization and also put less presure than `hash-table`s. To switch to `plist` you have to perform 2 steps:
 
-1. Configure the following env variable. Make sure that `Emacs` can see that variable (best way to do that is to start `Emacs` from the shell, not from the icon).
+1. Configure the following env variable. Make sure that `Emacs` can see that variable. For example, this can be done by starting `Emacs` from the shell.
 ``` bash
 export LSP_USE_PLISTS=true
 ```
-2. Delete `lsp-mode` related packages.
+or by setting it in `early-init.el`:
+```elisp
+(setenv "LSP_USE_PLISTS" "true")
+```
+2. Delete `lsp-mode` related packages. This can be done with `package-delete`.
 3. Make sure that `lsp-use-plists` is non-nil.
 4. Restart `Emacs` and install again `lsp-mode` related packages.
-```
-_NB:_ make sure that `lsp-use-plist` does not change after you compile the file.
+
+_NB:_ make sure that `lsp-use-plists` does not change after you compile the file. Furthermore, if you are using something like `exec-path-from-shell` you'll need to make sure to add `LSP_USE_PLISTS` to `exec-path-from-shell-variables`.
 
 ### Optional steps
 
@@ -50,9 +57,9 @@ _NB:_ make sure that `lsp-use-plist` does not change after you compile the file.
 ``` elisp
 (setq lsp-idle-delay 0.500)
 ```
-### gccemacs
+### Using Emacs 28.1 or later
 
-[gccemacs](https://akrl.sdf.org/gccemacs.html) is a bleeding-edge version of `Emacs` that compiles elisp to native code, resulting in more than 200% speedup. For everyone looking for optimal performance, `gccemacs` is the way to go.
+Emacs 28.1 includes "native compilation" of elisp code ([changelog](https://www.gnu.org/software/emacs/news/NEWS.28.1)). For optimal performance, using Emacs 28.1 or later (with native compilation enabled) is recommended.
 
 ## Ignore watch folders/files
 

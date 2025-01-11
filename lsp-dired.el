@@ -72,12 +72,11 @@
                    (if (dired-move-to-filename nil)
                        (let* ((file (dired-get-filename nil t))
                               (bol (progn
-                                     (point-at-bol)
                                      (search-forward-regexp "^[[:space:]]*" (line-end-position) t)
                                      (point)))
                               (face (lsp-dired--face-for-path file)))
                          (when face
-                           (-doto (make-overlay bol (point-at-eol))
+                           (-doto (make-overlay bol (line-end-position))
                              (overlay-put 'evaporate t)
                              (overlay-put 'face face))))
                      (cl-return-from :file nil))
@@ -89,27 +88,31 @@
 
 (defface lsp-dired-path-error-face
   '((t :underline (:style wave :color "Red1")))
-  "Face used for breadcrumb paths on headerline when there is an error under that path"
+  "Face used for breadcrumb paths on headerline when there is an error under
+that path"
   :group 'lsp-dired)
 
 (defface lsp-dired-path-warning-face
   '((t :underline (:style wave :color "Yellow")))
-  "Face used for breadcrumb paths on headerline when there is an warning under that path"
+  "Face used for breadcrumb paths on headerline when there is an warning under
+that path"
   :group 'lsp-dired)
 
 (defface lsp-dired-path-info-face
   '((t :underline (:style wave :color "Green")))
-  "Face used for breadcrumb paths on headerline when there is an info under that path"
+  "Face used for breadcrumb paths on headerline when there is an info under that
+path"
   :group 'lsp-dired)
 
 (defface lsp-dired-path-hint-face
   '((t :underline (:style wave :color "Green")))
-  "Face used for breadcrumb paths on headerline when there is an hint under that path"
+  "Face used for breadcrumb paths on headerline when there is an hint under that
+path"
   :group 'lsp-dired)
 
 (defun lsp-dired--face-for-path (dir)
   "Calculate the face for DIR."
-  (when-let ((diags (lsp-diagnostics-stats-for (directory-file-name dir))))
+  (when-let* ((diags (lsp-diagnostics-stats-for (directory-file-name dir))))
     (cl-labels ((check-severity
                  (severity)
                  (not (zerop (aref diags severity)))))

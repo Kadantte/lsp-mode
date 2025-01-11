@@ -1,3 +1,6 @@
+---
+root_file: docs/page/keybindings.md
+---
 # Keybindings
 
 When using `lsp-mode` most of the features depend on server
@@ -17,7 +20,7 @@ configured `lsp-command-map` which is bound to `lsp-keymap-prefix`
 | `s-l = r`  | Ask the server to format the region, or if none is selected, the current line.                                                      |
 | `s-l F a`  | Add new project root to the list of workspace folders.                                                                              |
 | `s-l F r`  | Remove project root from the list of workspace folders.                                                                             |
-| `s-l F b`  | Remove project root from the workspace blacklist.                                                                                   |
+| `s-l F b`  | Remove project root from the workspace blocklist.                                                                                   |
 | `s-l T l`  | Toggle code-lens overlays.                                                                                                          |
 | `s-l T L`  | Toggle client-server protocol logging.                                                                                              |
 | `s-l T h`  | Toggle symbol highlighting.                                                                                                         |
@@ -33,7 +36,7 @@ configured `lsp-command-map` which is bound to `lsp-keymap-prefix`
 | `s-l g d`  | Find declarations of the symbol under point.                                                                                        |
 | `s-l g h`  | Show the incoming call hierarchy for the symbol at point. (requires `lsp-treemacs`)                                                 |
 | `s-l g a`  | Find all meaningful symbols that match pattern.                                                                                     |
-| `s-l h h`  | Display the type signature and documentation of the thing at                                                                        |
+| `s-l h h`  | Display the type signature and documentation of the thing at point.                                                                 |
 | `s-l h s`  | Activate signature help.                                                                                                            |
 | `s-l h g`  | Trigger display hover information popup and hide it on next typing.                                                                 |
 | `s-l r r`  | Rename the symbol (and all references to it).                                                                                       |

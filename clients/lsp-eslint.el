@@ -32,9 +32,9 @@
 (defconst lsp-eslint/status-error 3)
 
 (defgroup lsp-eslint nil
-  "ESlint language server group."
+  "ESLint language server group."
   :group 'lsp-mode
-  :link '(url-link "https://github.com/Microsoft/vscode-eslint"))
+  :link '(url-link "https://github.com/microsoft/vscode-eslint"))
 
 (defcustom lsp-eslint-unzipped-path (f-join lsp-server-install-dir "eslint/unzipped")
   "The path to the file in which `eslint' will be stored."
@@ -42,22 +42,22 @@
   :group 'lsp-eslint
   :package-version '(lsp-mode . "8.0.0"))
 
-(defcustom lsp-eslint-download-url "https://github.com/emacs-lsp/lsp-server-binaries/blob/master/dbaeumer.vscode-eslint-2.2.2.vsix?raw=true"
-  "Eslint language server download url."
+(defcustom lsp-eslint-download-url "https://github.com/emacs-lsp/lsp-server-binaries/blob/master/dbaeumer.vscode-eslint-3.0.10.vsix?raw=true"
+  "ESLint language server download url."
   :type 'string
   :group 'lsp-eslint
-  :package-version '(lsp-mode . "8.0.1"))
+  :package-version '(lsp-mode . "9.0.0"))
 
 (defcustom lsp-eslint-server-command `("node"
                                        "~/server/out/eslintServer.js"
                                        "--stdio")
-  "Command to start eslint server."
+  "Command to start ESLint server."
   :risky t
   :type '(repeat string)
   :package-version '(lsp-mode . "6.3"))
 
 (defcustom lsp-eslint-enable t
-  "Controls whether eslint is enabled for JavaScript files or not."
+  "Controls whether ESLint is enabled for JavaScript files or not."
   :type 'boolean
   :package-version '(lsp-mode . "6.3"))
 
@@ -75,23 +75,36 @@
   :package-version '(lsp-mode . "6.3"))
 
 (defcustom lsp-eslint-node-path nil
-  "A path added to NODE_PATH when resolving the eslint module."
+  "A path added to NODE_PATH when resolving the `eslint' module."
   :type '(repeat string)
   :package-version '(lsp-mode . "6.3"))
 
 (defcustom lsp-eslint-node "node"
-  "Path to nodejs."
+  "Path to Node.js."
   :type 'file
   :package-version '(lsp-mode . "8.0.0"))
 
 (defcustom lsp-eslint-options nil
-  "The eslint options object to provide args normally passed to
-  eslint when executed from a command line (see
-  http://eslint.org/docs/developer-guide/nodejs-api#cliengine)."
+  "The ESLint options object to provide args normally passed to
+  `eslint' when executed from a command line (see
+  https://eslint.org/docs/latest/integrate/nodejs-api)."
+  :type 'alist)
+
+(defcustom lsp-eslint-experimental nil
+  "The eslint experimental configuration."
+  :type 'alist)
+
+(defcustom lsp-eslint-config-problems nil
+  "The eslint problems configuration."
+  :type 'alist)
+
+(defcustom lsp-eslint-time-budget nil
+  "The eslint config to inform you of slow validation times and
+  long ESLint runs when computing code fixes during save."
   :type 'alist)
 
 (defcustom lsp-eslint-trace-server "off"
-  "Traces the communication between VSCode and the eslint linter service."
+  "Traces the communication between VSCode and the ESLint linter service."
   :type 'string)
 
 (defcustom lsp-eslint-run "onType"
@@ -120,12 +133,23 @@ source.fixAll code action."
   :package-version '(lsp-mode . "6.3"))
 
 (defcustom lsp-eslint-working-directories []
-  ""
-  :type 'lsp-string-vector
+  "A vector of working directory names to use.
+Can be a pattern, an absolute path, a path relative to the workspace,
+or a supported mode such as \"auto\" or \"location\".
+Examples:
+ - \"/home/user/abc/\"
+ - \"abc/\"
+ - (directory \"abc\") which is equivalent to \"abc\" above
+ - (pattern \"abc/*\")
+ - (mode \"auto\")
+ - (mode \"location\")
+Note that the home directory reference ~/ is not currently supported, use
+/home/[user]/ instead."
+  :type '(lsp-repeatable-vector (choice string (plist mode string)))
   :package-version '(lsp-mode . "6.3"))
 
 (defcustom lsp-eslint-validate '("svelte")
-  "An array of language ids which should always be validated by eslint."
+  "An array of language ids which should always be validated by ESLint."
   :type '(repeat string)
   :package-version '(lsp-mode . "8.0.0"))
 
@@ -152,7 +176,7 @@ workspace (see https://eslint.org/docs/user-guide/command-line-interface)."
 
 (defcustom lsp-eslint-code-action-disable-rule-comment t
   "Controls whether code actions to add a rule-disabling comment should be shown."
-  :type 'bool
+  :type 'boolean
   :package-version '(lsp-mode . "6.3"))
 
 (defcustom lsp-eslint-code-action-disable-rule-comment-location "separateLine"
@@ -167,18 +191,18 @@ Accepts the following values:
   :package-version '(lsp-mode . "8.0.0"))
 
 (defcustom lsp-eslint-code-action-show-documentation t
-  "Controls whether code actions to show documentation for an eslint rule should
+  "Controls whether code actions to show documentation for an ESLint rule should
 be shown."
-  :type 'bool
+  :type 'boolean
   :package-version '(lsp-mode . "8.0.0"))
 
 (defcustom lsp-eslint-warn-on-ignored-files nil
   "Controls whether a warning should be emitted when a file is ignored."
-  :type 'bool
+  :type 'boolean
   :package-version '(lsp-mode . "8.0.0"))
 
 (defcustom lsp-eslint-rules-customizations []
-  "Controls severity overrides for eslint rules.
+  "Controls severity overrides for ESLint rules.
 
 The value is a vector of alists, with each alist containing the following keys:
 - rule - The rule to match. Can match wildcards with *, or be prefixed with !
@@ -190,7 +214,7 @@ The value is a vector of alists, with each alist containing the following keys:
   - \"error\": Report as an error.
   - \"upgrade\": Increase by 1 severity level (eg. warning -> error).
   - \"downgrade\": Decrease by 1 severity level (eg. warning -> info).
-  - \"default\": Report as the same severity specified in the eslint config."
+  - \"default\": Report as the same severity specified in the ESLint config."
   :type '(lsp-repeatable-vector
           (alist :options ((rule string)
                            (severity (choice
@@ -223,7 +247,7 @@ stored."
 
 (defun lsp--find-eslint ()
   (or
-   (when-let ((workspace-folder (lsp-find-session-folder (lsp-session) default-directory)))
+   (when-let* ((workspace-folder (lsp-find-session-folder (lsp-session) default-directory)))
      (let ((eslint-local-path (f-join workspace-folder "node_modules" ".bin"
                                       (if (eq system-type 'windows-nt) "eslint.cmd" "eslint"))))
        (when (f-exists? eslint-local-path)
@@ -231,7 +255,7 @@ stored."
    "eslint"))
 
 (defun lsp-eslint-create-default-configuration ()
-  "Create default eslint configuration."
+  "Create default ESLint configuration."
   (interactive)
   (unless (lsp-session-folders (lsp-session))
     (user-error "There are no workspace folders"))
@@ -241,7 +265,7 @@ stored."
                          (-none?
                           (lambda (file) (f-exists? (f-join dir file)))
                           '(".eslintrc.js" ".eslintrc.yaml" ".eslintrc.yml" ".eslintrc" ".eslintrc.json")))))
-    (`nil (user-error "All workspace folders contain eslint configuration"))
+    (`nil (user-error "All workspace folders contain ESLint configuration"))
     (folders (let ((default-directory (completing-read "Select project folder: " folders nil t)))
                (async-shell-command (format "%s --init" (lsp--find-eslint)))))))
 
@@ -274,12 +298,43 @@ stored."
                             :quiet (lsp-json-bool lsp-eslint-quiet)
                             :onIgnoredFiles (if lsp-eslint-warn-on-ignored-files "warn" "off")
                             :options (or lsp-eslint-options (ht))
+                            :experimental (or lsp-eslint-experimental (ht))
+                            :problems (or lsp-eslint-config-problems (ht))
+                            :timeBudget (or lsp-eslint-time-budget (ht))
                             :rulesCustomizations lsp-eslint-rules-customizations
                             :run lsp-eslint-run
                             :nodePath lsp-eslint-node-path
+                            :workingDirectory (lsp-eslint--working-directory workspace-folder file)
                             :workspaceFolder (list :uri (lsp--path-to-uri workspace-folder)
                                                    :name (f-filename workspace-folder)))))))
        (apply #'vector)))
+
+(defun lsp-eslint--working-directory (workspace current-file)
+  "Find the first directory in the parameter config.workingDirectories which
+contains the current file"
+  (let* ((directories (-map (lambda (dir)
+                              (when (and (listp dir) (plist-member dir 'directory))
+                                (setq dir (plist-get dir 'directory)))
+                              (cond
+                               ((not (listp dir))
+                                (if (f-absolute? dir) dir (f-join workspace dir)))
+                               ((plist-member dir 'pattern)
+                                (setq dir (plist-get dir 'pattern))
+                                (when (not (f-absolute? dir))
+                                  (setq dir (f-join workspace dir)))
+                                (f-glob dir))
+                               ((plist-member dir 'mode)
+                                ;; we don't want this setting to get flattened by -flatten
+                                `(mode . ,(plist-get dir 'mode)))))
+                            (append lsp-eslint-working-directories nil)))
+         (working-directory (-first (lambda (dir)
+                                      (if (stringp dir)
+                                          (f-ancestor-of-p dir current-file)
+                                        dir))
+                                    (-flatten directories))))
+    (cond
+     ((consp working-directory) `(:mode ,(cdr working-directory)))
+     ((stringp working-directory) (list :directory working-directory :!cwd :json-false)))))
 
 (lsp-defun lsp-eslint--open-doc (_workspace (&eslint:OpenESLintDocParams :url))
   "Open documentation."
@@ -328,7 +383,7 @@ to allow or deny it.")
   (setq lsp-eslint--stored-libraries (lsp--read-from-file lsp-eslint-library-choices-file)))
 
 (lsp-defun lsp-eslint--confirm-local (_workspace (&eslint:ConfirmExecutionParams :library-path) callback)
-  (if-let ((option-alist '(("Always" 4 . t)
+  (if-let* ((option-alist '(("Always" 4 . t)
                            ("Yes" 4 . nil)
                            ("No" 1 . nil)
                            ("Never" 1 . t)))
@@ -362,7 +417,7 @@ to allow or deny it.")
                      (or (string-match-p (rx (one-or-more anything) "."
                                              (or "ts" "js" "jsx" "tsx" "html" "vue" "svelte")eos)
                                          filename)
-                         (and (derived-mode-p 'js-mode 'js2-mode 'typescript-mode 'html-mode 'svelte-mode)
+                         (and (derived-mode-p 'js-mode 'js2-mode 'typescript-mode 'typescript-ts-mode 'html-mode 'svelte-mode)
                            (not (string-match-p "\\.json\\'" filename))))))
   :priority -1
   :completion-in-comments? t

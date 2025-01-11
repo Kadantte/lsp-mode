@@ -32,12 +32,72 @@
   :group 'lsp-mode
   :link '(url-link "https://github.com/PMunch/nimlsp"))
 
-(lsp-register-client
- (make-lsp-client :new-connection (lsp-stdio-connection "nimlsp")
-                  :major-modes '(nim-mode)
-                  :priority -1
-                  :server-id 'nimls))
+(lsp-defcustom lsp-nim-project-mapping []
+  "Nimsuggest project mapping. Sample value
 
+[(:projectFile \"root.nim\"
+  :fileRegex \".*\\.nim\")]"
+
+  :type '(lsp-repeatable-vector plist)
+  :group 'lsp-nim
+  :package-version '(lsp-mode . "9.0.0")
+  :lsp-path "nim.projectMapping")
+
+(lsp-defcustom lsp-nim-timeout 120000
+  "Timeout for restarting `nimsuggest'"
+  :type 'number
+  :group 'lsp-nim
+  :package-version '(lsp-mode . "9.0.0")
+  :lsp-path "nim.timeout")
+
+(lsp-defcustom lsp-nim-nimsuggest-path "nimsuggest"
+  "Path to `nimsuggest' to use."
+  :type 'number
+  :group 'lsp-nim
+  :package-version '(lsp-mode . "9.0.0")
+  :lsp-path "nim.nimsuggestPath")
+
+(lsp-defcustom lsp-nim-auto-check-file t
+  "Check the file on the fly"
+  :type 'boolean
+  :group 'lsp-nim
+  :package-version '(lsp-mode . "9.0.0")
+  :lsp-path "nim.autoCheckFile")
+
+(lsp-defcustom lsp-nim-auto-check-project t
+  "Check the project after saving the file"
+  :type 'boolean
+  :group 'lsp-nim
+  :package-version '(lsp-mode . "9.0.0")
+  :lsp-path "nim.autoCheckProject")
+
+(defcustom lsp-nim-langserver "nimlangserver"
+  "Path to `nimlangserver'"
+  :type 'number
+  :group 'lsp-nim
+  :package-version '(lsp-mode . "9.0.0"))
+
+(defcustom lsp-nim-lsp "nimlsp"
+  "Path to `nimlsp'"
+  :type 'number
+  :group 'lsp-nim
+  :package-version '(lsp-mode . "9.0.0"))
+
+(lsp-register-client
+ (make-lsp-client :new-connection (lsp-stdio-connection
+                                   (lambda () lsp-nim-lsp))
+                  :activation-fn (lsp-activate-on "nim")
+                  :priority -1
+                  :server-id 'nimlsp))
+
+(lsp-register-client
+ (make-lsp-client :new-connection (lsp-stdio-connection
+                                   (lambda () lsp-nim-langserver))
+                  :synchronize-sections '("nim")
+                  :activation-fn (lsp-activate-on "nim")
+                  :notification-handlers
+                  (ht ("extension/statusUpdate" #'ignore))
+                  :server-id 'nimlangserver))
 
 (lsp-consistency-check lsp-nim)
 

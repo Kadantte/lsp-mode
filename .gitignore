@@ -28,8 +28,8 @@ tramp
 # AUCTeX auto folder
 /auto/
 
-# cask packages
-.cask/
+# eask packages
+.eask/
 dist/
 
 # Flycheck
@@ -54,3 +54,8 @@ target
 .project
 .settings
 /ert-profile
+docs/page/lsp-*.md
+/docs/page/settings/
+/docs/page/CHANGELOG.md
+/docs/examples/
+docs/README.md

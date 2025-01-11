@@ -65,7 +65,7 @@
 List containing (tag attributes) where tag is the LSP diagnostic tag and
 attributes is a `plist' containing face attributes which will be applied
 on top the flycheck face for that error level."
-  :type '(repeat list)
+  :type '(repeat (list symbol plist))
   :group 'lsp-diagnostics)
 
 (defcustom lsp-diagnostics-disabled-modes nil
@@ -105,7 +105,7 @@ g. `error', `warning') and list of LSP TAGS."
                       flycheck-level
                       (mapconcat #'symbol-name tags "-"))))
     (or (intern-soft name)
-        (let* ((face (--doto (intern (format "lsp-%s-face" name))
+        (let* ((face (--doto (intern (format "%s-face" name))
                        (copy-face (-> flycheck-level
                                       (get 'flycheck-overlay-category)
                                       (get 'face))
@@ -114,7 +114,7 @@ g. `error', `warning') and list of LSP TAGS."
                                (apply #'set-face-attribute it nil
                                       (cl-rest (assoc tag lsp-diagnostics-attributes))))
                              tags)))
-               (category (--doto (intern (format "lsp-%s-category" name))
+               (category (--doto (intern (format "%s-category" name))
                            (setf (get it 'face) face
                                  (get it 'priority) 100)))
                (new-level (intern name))
@@ -156,10 +156,12 @@ CALLBACK is the status callback passed by Flycheck."
 
   (->> (lsp--get-buffer-diagnostics)
        (-map (-lambda ((&Diagnostic :message :severity? :tags? :code? :source?
-                                    :range (&Range :start (&Position :line      start-line
-                                                                     :character start-character)
-                                                   :end   (&Position :line      end-line
-                                                                     :character end-character))))
+                                    :range (&Range :start (start &as &Position
+                                                                 :line      start-line
+                                                                 :character start-character)
+                                                   :end   (end   &as &Position
+                                                                 :line      end-line
+                                                                 :character end-character))))
                (flycheck-error-new
                 :buffer (current-buffer)
                 :checker checker
@@ -171,7 +173,8 @@ CALLBACK is the status callback passed by Flycheck."
                 :line (lsp-translate-line (1+ start-line))
                 :column (1+ (lsp-translate-column start-character))
                 :end-line (lsp-translate-line (1+ end-line))
-                :end-column (1+ (lsp-translate-column end-character)))))
+                :end-column (unless (lsp--position-equal start end)
+                              (1+ (lsp-translate-column end-character))))))
        (funcall callback 'finished)))
 
 (defun lsp-diagnostics--flycheck-buffer ()
@@ -293,15 +296,15 @@ See https://github.com/emacs-lsp/lsp-mode."
                                                         :end (&Position :line end-line))) it)
                             ((start . end) (lsp--range-to-region range)))
                       (when (= start end)
-                        (if-let ((region (flymake-diag-region (current-buffer)
+                        (if-let* ((region (flymake-diag-region (current-buffer)
                                                               (1+ start-line)
                                                               character)))
                             (setq start (car region)
                                   end (cdr region))
                           (lsp-save-restriction-and-excursion
                             (goto-char (point-min))
-                            (setq start (point-at-bol (1+ start-line))
-                                  end (point-at-eol (1+ end-line))))))
+                            (setq start (line-beginning-position (1+ start-line))
+                                  end (line-end-position (1+ end-line))))))
                       (flymake-make-diagnostic (current-buffer)
                                                start
                                                end

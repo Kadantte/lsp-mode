@@ -39,7 +39,14 @@ Version 1.34.3 minimum is required."
 Version 1.34.3 minimum is required."
   :group 'lsp-mode
   :link '(url-link "https://github.com/OmniSharp/omnisharp-roslyn")
-  :package-version '(lsp-mode . "8.0.1"))
+  :package-version '(lsp-mode . "9.0.0"))
+
+(defconst lsp-csharp--omnisharp-metadata-uri-re
+  "^file:///%24metadata%24/Project/\\(.+\\)/Assembly/\\(.+\\)/Symbol/\\(.+\\)\.cs$"
+  "Regular expression matching omnisharp's metadata uri.
+Group 1 contains the Project name
+Group 2 contains the Assembly name
+Group 3 contains the Type name")
 
 (defcustom lsp-csharp-server-install-dir
   (f-join lsp-server-install-dir "omnisharp-roslyn/")
@@ -56,7 +63,7 @@ Set this if you have the binary installed or have it built yourself."
 
 (defcustom lsp-csharp-test-run-buffer-name
   "*lsp-csharp test run*"
-  "The name of buffer used for outputing lsp-csharp test run results."
+  "The name of buffer used for outputting lsp-csharp test run results."
   :group 'lsp-csharp-omnisharp
   :type 'string)
 
@@ -79,12 +86,14 @@ Usually this is to be set in your .dir-locals.el on the project root directory."
                    "omnisharp-win-x86.zip"))
 
                 ((eq system-type 'darwin)
-                 "omnisharp-osx.zip")
+                 (if (string-match "aarch64-.*" system-configuration)
+                     "omnisharp-osx-arm64-net6.0.zip"
+                   "omnisharp-osx-x64-net6.0.zip"))
 
                 ((and (eq system-type 'gnu/linux)
                       (or (eq (string-match "^x86_64" system-configuration) 0)
                           (eq (string-match "^i[3-6]86" system-configuration) 0)))
-                 "omnisharp-linux-x64.zip")
+                 "omnisharp-linux-x64-net6.0.zip")
 
                 (t "omnisharp-mono.zip")))
   "Automatic download url for omnisharp-roslyn."
@@ -97,48 +106,69 @@ Usually this is to be set in your .dir-locals.el on the project root directory."
   :group 'lsp-csharp-omnisharp
   :type 'file)
 
+(defcustom lsp-csharp-omnisharp-roslyn-binary-path
+  (f-join lsp-csharp-server-install-dir "latest" (if (eq system-type 'windows-nt)
+                                                     "OmniSharp.exe"
+                                                   "OmniSharp"))
+  "The path where omnisharp-roslyn binary after will be stored."
+  :group 'lsp-csharp-omnisharp
+  :type 'file)
+
 (defcustom lsp-csharp-omnisharp-roslyn-server-dir
   (f-join lsp-csharp-server-install-dir "latest" "omnisharp-roslyn")
   "The path where omnisharp-roslyn .zip archive will be extracted."
   :group 'lsp-csharp-omnisharp
   :type 'file)
 
+
+(defcustom lsp-csharp-omnisharp-enable-decompilation-support
+  nil
+  "Decompile bytecode when browsing method metadata for types in assemblies.
+Otherwise only declarations for the methods are visible (the default)."
+  :group 'lsp-csharp
+  :type 'boolean)
+
+(defcustom lsp-csharp-csharpls-use-dotnet-tool t
+  "Whether to use a dotnet tool version of the expected C#
+ language server; only available for csharp-ls"
+  :group 'lsp-csharp
+  :type 'boolean
+  :risky t)
+
+(defcustom lsp-csharp-csharpls-use-local-tool nil
+  "Whether to use csharp-ls as a global or local dotnet tool.
+
+Note: this variable has no effect if
+lsp-csharp-csharpls-use-dotnet-tool is nil."
+  :group 'lsp-csharp
+  :type 'boolean
+  :risky t)
+
 (lsp-dependency
  'omnisharp-roslyn
  `(:download :url lsp-csharp-omnisharp-roslyn-download-url
-             :store-path lsp-csharp-omnisharp-roslyn-store-path))
+             :decompress :zip
+             :store-path lsp-csharp-omnisharp-roslyn-store-path
+             :binary-path lsp-csharp-omnisharp-roslyn-binary-path
+             :set-executable? t)
+ '(:system "OmniSharp"))
 
-(defun lsp-csharp--download-server (_client callback error-callback _update?)
+(defun lsp-csharp--omnisharp-download-server (_client callback error-callback _update?)
   "Download zip package for omnisharp-roslyn and install it.
 Will invoke CALLBACK on success, ERROR-CALLBACK on error."
-  (lsp-package-ensure
-   'omnisharp-roslyn
-   (lambda ()
-     (lsp-unzip lsp-csharp-omnisharp-roslyn-store-path
-                lsp-csharp-omnisharp-roslyn-server-dir)
-     (unless (eq system-type 'windows-nt)
-       (let ((run-script (f-join lsp-csharp-omnisharp-roslyn-server-dir "run")))
-         (when (not (f-exists-p run-script))
-           ; create the `run' script when missing (e.g. when server binaries are extracted from omnisharp-mono.zip)
-           ; NOTE: we do not check for presence or version of mono in the system
-           (with-temp-file run-script
-             (insert "#!/bin/bash\n")
-             (insert "BASEDIR=$(dirname \"$0\")\n")
-             (insert "exec mono $BASEDIR/OmniSharp.exe $@\n")))
-         (set-file-modes run-script #o755)))
-     (funcall callback))
-   error-callback))
+  (lsp-package-ensure 'omnisharp-roslyn callback error-callback))
 
 (defun lsp-csharp--language-server-path ()
   "Resolve path to use to start the server."
-  (if lsp-csharp-server-path
-      lsp-csharp-server-path
-    (let ((server-dir lsp-csharp-omnisharp-roslyn-server-dir))
-      (when (f-exists? server-dir)
-        (f-join server-dir (cond ((eq system-type 'windows-nt) "OmniSharp.exe")
-                                 (t "run")))))))
+  (let ((executable-name (if (eq system-type 'windows-nt)
+                             "OmniSharp.exe"
+                           "OmniSharp")))
+    (or (and lsp-csharp-server-path
+             (executable-find lsp-csharp-server-path))
+        (executable-find executable-name)
+        (lsp-package-path 'omnisharp-roslyn))))
 
-(lsp-defun lsp-csharp-open-project-file ()
+(defun lsp-csharp-open-project-file ()
   "Open corresponding project file  (.csproj) for the current file."
   (interactive)
   (-let* ((project-info-req (lsp-make-omnisharp-project-information-request :file-name (buffer-file-name)))
@@ -183,7 +213,7 @@ Returns :elements from omnisharp:CodeStructureResponse."
 
 (defun lsp-csharp--code-element-stack-on-l-c (l c elements)
   "Return omnisharp:CodeElement stack at L (line) and C (column) in ELEMENTS tree."
-  (when-let ((matching-element (seq-find (lambda (el)
+  (when-let* ((matching-element (seq-find (lambda (el)
                                            (-when-let* (((&omnisharp:CodeElement :ranges) el)
                                                         ((&omnisharp:RangeList :full?) ranges))
                                              (lsp-csharp--l-c-within-range l c full?)))
@@ -216,7 +246,7 @@ PRESENT-BUFFER will make the buffer be presented to the user."
       (erase-buffer)))
 
   (when present-buffer
-      (display-buffer lsp-csharp-test-run-buffer-name)))
+    (display-buffer lsp-csharp-test-run-buffer-name)))
 
 (defun lsp-csharp--start-tests (test-method-framework test-method-names)
   "Run test(s) identified by TEST-METHOD-NAMES using TEST-METHOD-FRAMEWORK."
@@ -236,7 +266,7 @@ PRESENT-BUFFER will make the buffer be presented to the user."
 
 (defun lsp-csharp--test-message (message)
   "Emit a MESSAGE to lsp-csharp test run buffer."
-  (when-let ((existing-buffer (get-buffer lsp-csharp-test-run-buffer-name))
+  (when-let* ((existing-buffer (get-buffer lsp-csharp-test-run-buffer-name))
              (inhibit-read-only t))
     (with-current-buffer existing-buffer
       (save-excursion
@@ -279,18 +309,17 @@ PRESENT-BUFFER will make the buffer be presented to the user."
 (defun lsp-csharp-run-last-tests ()
   "Re-run test(s) that were run last time."
   (interactive)
-  (if-let ((last-test-method-framework (lsp-session-get-metadata "last-test-method-framework"))
+  (if-let* ((last-test-method-framework (lsp-session-get-metadata "last-test-method-framework"))
            (last-test-method-names (lsp-session-get-metadata "last-test-method-names")))
       (lsp-csharp--start-tests last-test-method-framework last-test-method-names)
     (message "lsp-csharp: No test method(s) found to be ran previously on this workspace")))
 
 (lsp-defun lsp-csharp--handle-os-error (_workspace (&omnisharp:ErrorMessage :file-name :text))
-  "Handle the 'o#/error' (interop) notification by displaying a message with lsp-warn."
+  "Handle the `o#/error' (interop) notification displaying a message."
   (lsp-warn "%s: %s" file-name text))
 
 (lsp-defun lsp-csharp--handle-os-testmessage (_workspace (&omnisharp:TestMessageEvent :message))
-  "Handle the 'o#/testmessage and display test message on lsp-csharp
-test output buffer."
+  "Handle the `o#/testmessage and display test message on test output buffer."
   (lsp-csharp--test-message message))
 
 (lsp-defun lsp-csharp--handle-os-testcompleted (_workspace (&omnisharp:DotNetTestResult
@@ -300,7 +329,7 @@ test output buffer."
                                                             :error-stack-trace
                                                             :standard-output
                                                             :standard-error))
-  "Handle the 'o#/testcompleted' message from the server.
+  "Handle the `o#/testcompleted' message from the server.
 
 Will display the results of the test on the lsp-csharp test output buffer."
   (let ((passed (string-equal "passed" outcome)))
@@ -336,6 +365,62 @@ using the `textDocument/references' request."
       (lsp-show-xrefs (lsp--locations-to-xref-items locations-found) nil t)
     (message "No references found")))
 
+(defun lsp-csharp--omnisharp-path->qualified-name (path)
+  "Convert PATH to qualified-namespace-like name."
+  (replace-regexp-in-string
+   (regexp-quote "/")
+   "."
+   path))
+
+(defun lsp-csharp--omnisharp-metadata-uri-handler (uri)
+  "Handle `file:/(metadata)' URI from omnisharp-roslyn server.
+
+The URI is parsed and then `o#/metadata' request is issued to retrieve
+metadata from the server. A cache file is created on project root dir that
+stores this metadata and filename is returned so lsp-mode can display this file."
+  (string-match lsp-csharp--omnisharp-metadata-uri-re uri)
+  (-when-let* ((project-name (lsp-csharp--omnisharp-path->qualified-name (url-unhex-string (match-string 1 uri))))
+               (assembly-name (lsp-csharp--omnisharp-path->qualified-name (url-unhex-string (match-string 2 uri))))
+               (type-name (lsp-csharp--omnisharp-path->qualified-name (url-unhex-string (match-string 3 uri))))
+               (metadata-req (lsp-make-omnisharp-metadata-request :project-name project-name
+                                                                  :assembly-name assembly-name
+                                                                  :type-name type-name))
+               (metadata (lsp-request "o#/metadata" metadata-req))
+               ((&omnisharp:MetadataResponse :source-name :source) metadata)
+               (filename (f-join ".cache"
+                                 "lsp-csharp"
+                                 "metadata"
+                                 "Project" project-name
+                                 "Assembly" assembly-name
+                                 "Symbol" (concat type-name ".cs")))
+               (file-location (expand-file-name filename (lsp--suggest-project-root)))
+               (metadata-file-location (concat file-location ".metadata-uri"))
+               (path (f-dirname file-location)))
+
+    (unless (find-buffer-visiting file-location)
+      (unless (file-directory-p path)
+        (make-directory path t))
+
+      (with-temp-file metadata-file-location
+        (insert uri))
+
+      (with-temp-file file-location
+        (insert source)))
+
+    file-location))
+
+(defun lsp-csharp--omnisharp-uri->path-fn (uri)
+  "Custom implementation of lsp--uri-to-path function to glue omnisharp's
+metadata uri."
+  (if (string-match-p lsp-csharp--omnisharp-metadata-uri-re uri)
+      (lsp-csharp--omnisharp-metadata-uri-handler uri)
+    (lsp--uri-to-path-1 uri)))
+
+(defun lsp-csharp--omnisharp-environment-fn ()
+  "Build environment structure for current values of lsp-csharp customizables.
+See https://github.com/OmniSharp/omnisharp-roslyn/wiki/Configuration-Options"
+  `(("OMNISHARP_RoslynExtensionsOptions:enableDecompilationSupport" . ,(if lsp-csharp-omnisharp-enable-decompilation-support "true" "false"))))
+
 (lsp-register-client
  (make-lsp-client :new-connection
                   (lsp-stdio-connection
@@ -345,11 +430,13 @@ using the `textDocument/references' request."
                         (when lsp-csharp-solution-file
                           (list "-s" (expand-file-name lsp-csharp-solution-file)))))
                    #'(lambda ()
-                       (when-let ((binary (lsp-csharp--language-server-path)))
+                       (when-let* ((binary (lsp-csharp--language-server-path)))
                          (f-exists? binary))))
-                  :major-modes '(csharp-mode csharp-tree-sitter-mode)
+                  :activation-fn (lsp-activate-on "csharp")
                   :server-id 'omnisharp
                   :priority -1
+                  :uri->path-fn #'lsp-csharp--omnisharp-uri->path-fn
+                  :environment-fn #'lsp-csharp--omnisharp-environment-fn
                   :action-handlers (ht ("omnisharp/client/findReferences" 'lsp-csharp--action-client-find-references))
                   :notification-handlers (ht ("o#/projectadded" 'ignore)
                                              ("o#/projectchanged" 'ignore)
@@ -362,8 +449,9 @@ using the `textDocument/references' request."
                                              ("o#/testmessage" 'lsp-csharp--handle-os-testmessage)
                                              ("o#/testcompleted" 'lsp-csharp--handle-os-testcompleted)
                                              ("o#/projectconfiguration" 'ignore)
-                                             ("o#/projectdiagnosticstatus" 'ignore))
-                  :download-server-fn #'lsp-csharp--download-server))
+                                             ("o#/projectdiagnosticstatus" 'ignore)
+                                             ("o#/backgrounddiagnosticstatus" 'ignore))
+                  :download-server-fn #'lsp-csharp--omnisharp-download-server))
 
 ;;
 ;; Alternative "csharp-ls" language server support
@@ -372,9 +460,9 @@ using the `textDocument/references' request."
 (lsp-defun lsp-csharp--cls-metadata-uri-handler (uri)
   "Handle `csharp:/(metadata)' uri from csharp-ls server.
 
-'csharp/metadata' request is issued to retrieve metadata from the server.
-A cache file is created on project root dir that stores this metadata and filename
-is returned so lsp-mode can display this file."
+`csharp/metadata' request is issued to retrieve metadata from the server.
+A cache file is created on project root dir that stores this metadata and
+filename is returned so lsp-mode can display this file."
 
   (-when-let* ((metadata-req (lsp-make-csharp-ls-c-sharp-metadata
                               :text-document (lsp-make-text-document-identifier :uri uri)))
@@ -414,25 +502,67 @@ is returned so lsp-mode can display this file."
                   (with-temp-buffer (insert-file-contents metadata-file-name)
                                     (buffer-string))))))
 
+(defun lsp-csharp--cls-find-executable ()
+  (or (when lsp-csharp-csharpls-use-dotnet-tool
+        (if lsp-csharp-csharpls-use-local-tool
+            (list "dotnet" "tool" "run" "csharp-ls")
+          (list "csharp-ls")))
+      (executable-find "csharp-ls")      
+      (f-join (or (getenv "USERPROFILE") (getenv "HOME"))
+              ".dotnet" "tools" "csharp-ls")))
+
+(defun lsp-csharp--cls-make-launch-cmd ()
+  "Return command line to invoke csharp-ls."
+
+  ;; emacs-28.1 on macOS has an issue
+  ;; that it launches processes using posix_spawn but does not reset sigmask properly
+  ;; thus causing dotnet runtime to lockup awaiting a SIGCHLD signal that never comes
+  ;; from subprocesses that quit
+  ;;
+  ;; as a workaround we will wrap csharp-ls invocation in "/bin/ksh -c" on macos
+  ;; so it launches with proper sigmask
+  ;;
+  ;; see https://lists.gnu.org/archive/html/emacs-devel/2022-02/msg00461.html
+
+  (let ((startup-wrapper (cond ((and (eq 'darwin system-type)
+                                     (version= "28.1" emacs-version))
+                                (list "/bin/ksh" "-c"))
+
+                               (t nil)))
+
+        (csharp-ls-exec (lsp-csharp--cls-find-executable))
+
+        (solution-file-params (when lsp-csharp-solution-file
+                                (list "-s" lsp-csharp-solution-file))))
+    (append startup-wrapper
+            (if (listp csharp-ls-exec)
+                csharp-ls-exec
+              (list csharp-ls-exec))
+            solution-file-params)))
+
+(defun lsp-csharp--cls-test-csharp-ls-present ()
+  "Return non-nil if dotnet tool csharp-ls is installed as a dotnet tool."
+  (string-match-p "csharp-ls"
+                  (shell-command-to-string
+                   (if lsp-csharp-csharpls-use-local-tool
+                       "dotnet tool list"
+                     "dotnet tool list -g"))))
+
 (defun lsp-csharp--cls-download-server (_client callback error-callback update?)
   "Install/update csharp-ls language server using `dotnet tool'.
 
-Will invoke CALLBACK or ERROR-CALLBACK based on result. Will update if UPDATE? is t"
+Will invoke CALLBACK or ERROR-CALLBACK based on result.
+Will update if UPDATE? is t"
   (lsp-async-start-process
    callback
    error-callback
-   "dotnet" "tool" (if update? "update" "install") "-g" "csharp-ls"))
+   "dotnet" "tool" (if update? "update" "install") (if lsp-csharp-csharpls-use-local-tool "" "-g") "csharp-ls"))
 
 (lsp-register-client
- (make-lsp-client :new-connection
-                  (lsp-stdio-connection
-                   #'(lambda ()
-                       (append (list "csharp-ls")
-                               (when lsp-csharp-solution-file
-                                 (list "-s" lsp-csharp-solution-file)))))
+ (make-lsp-client :new-connection (lsp-stdio-connection #'lsp-csharp--cls-make-launch-cmd)
                   :priority -2
                   :server-id 'csharp-ls
-                  :major-modes '(csharp-mode csharp-tree-sitter-mode)
+                  :activation-fn (lsp-activate-on "csharp")
                   :before-file-open-fn #'lsp-csharp--cls-before-file-open
                   :uri-handlers (ht ("csharp" #'lsp-csharp--cls-metadata-uri-handler))
                   :download-server-fn #'lsp-csharp--cls-download-server))

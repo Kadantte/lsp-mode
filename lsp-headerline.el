@@ -61,25 +61,29 @@
 (defface lsp-headerline-breadcrumb-path-error-face
   '((t :underline (:style wave :color "Red1")
        :inherit lsp-headerline-breadcrumb-path-face))
-  "Face used for breadcrumb paths on headerline when there is an error under that path"
+  "Face used for breadcrumb paths on headerline when there is an error under
+that path"
   :group 'lsp-headerline)
 
 (defface lsp-headerline-breadcrumb-path-warning-face
   '((t :underline (:style wave :color "Yellow")
        :inherit lsp-headerline-breadcrumb-path-face))
-  "Face used for breadcrumb paths on headerline when there is an warning under that path"
+  "Face used for breadcrumb paths on headerline when there is an warning under
+that path"
   :group 'lsp-headerline)
 
 (defface lsp-headerline-breadcrumb-path-info-face
   '((t :underline (:style wave :color "Green")
        :inherit lsp-headerline-breadcrumb-path-face))
-  "Face used for breadcrumb paths on headerline when there is an info under that path"
+  "Face used for breadcrumb paths on headerline when there is an info under
+that path"
   :group 'lsp-headerline)
 
 (defface lsp-headerline-breadcrumb-path-hint-face
   '((t :underline (:style wave :color "Green")
        :inherit lsp-headerline-breadcrumb-path-face))
-  "Face used for breadcrumb paths on headerline when there is an hint under that path"
+  "Face used for breadcrumb paths on headerline when there is an hint under that
+path"
   :group 'lsp-headerline)
 
 (defface lsp-headerline-breadcrumb-project-prefix-face
@@ -133,9 +137,6 @@ is an hints in symbols range."
   "Face used on breadcrumb deprecated text on modeline."
   :group 'lsp-headerline)
 
-(defvar-local lsp-headerline--string nil
-  "Holds the current breadcrumb string on headerline.")
-
 (defvar lsp-headerline-arrow nil
   "Holds the current breadcrumb string on headerline.")
 
@@ -143,15 +144,25 @@ is an hints in symbols range."
   "Holds the current breadcrumb path-up-to-project segments for
 caching purposes.")
 
+(defvar-local lsp-headerline--cached-workspace-root nil
+  "Holds the current value of lsp-workspace-root for caching purposes")
+
+;; Redefine local vars of `all-the-icons' to avoid bytecode compilation errors.
+(defvar all-the-icons-default-adjust)
+(defvar all-the-icons-scale-factor)
+
 (defun lsp-headerline--arrow-icon ()
   "Build the arrow icon for headerline breadcrumb."
   (or
    lsp-headerline-arrow
-   (setq lsp-headerline-arrow (lsp-icons-all-the-icons-material-icon
-                               "chevron_right"
-                               'lsp-headerline-breadcrumb-separator-face
-                               ">"
-                               'headerline-breadcrumb))))
+   (setq lsp-headerline-arrow (let ((all-the-icons-scale-factor 1.0)
+                                    (all-the-icons-default-adjust 0))
+                                (lsp-icons-all-the-icons-icon
+                                 'material
+                                 "chevron_right"
+                                 'lsp-headerline-breadcrumb-separator-face
+                                 ">"
+                                 'headerline-breadcrumb)))))
 
 (lsp-defun lsp-headerline--symbol-icon ((&DocumentSymbol :kind))
   "Build the SYMBOL icon for headerline breadcrumb."
@@ -177,7 +188,8 @@ narrow to the outer symbol."
   (narrow-to-region start end))
 
 (defun lsp-headerline--with-action (local-map help-echo-string display-string)
-  "Assign LOCAL-MAP and HELP-ECHO-STRING to the region around the DISPLAY-STRING."
+  "Assign LOCAL-MAP and HELP-ECHO-STRING to the region around the
+DISPLAY-STRING."
   (propertize display-string
               'mouse-face 'header-line-highlight
               'help-echo help-echo-string
@@ -247,7 +259,7 @@ PATH is the current folder to be checked."
 
 (defun lsp-headerline--build-project-string ()
   "Build the project-segment string for the breadcrumb."
-  (-if-let (root (lsp-workspace-root))
+  (-if-let (root (lsp-headerline--workspace-root))
       (propertize (lsp-headerline--directory-with-action
                    root
                    (f-filename root))
@@ -261,7 +273,7 @@ PATH is the current folder to be checked."
   "Build the file-segment string for the breadcrumb."
   (let* ((file-path (or (buffer-file-name) ""))
          (filename (f-filename file-path)))
-    (if-let ((file-ext (f-ext file-path)))
+    (if-let* ((file-ext (f-ext file-path)))
         (concat (lsp-icons-get-by-file-ext file-ext 'headerline-breadcrumb)
                 " "
                 (propertize filename
@@ -272,7 +284,7 @@ PATH is the current folder to be checked."
 
 (defun lsp-headerline--face-for-path (dir)
   "Calculate the face for DIR."
-  (if-let ((diags (lsp-diagnostics-stats-for (directory-file-name dir))))
+  (if-let* ((diags (lsp-diagnostics-stats-for (directory-file-name dir))))
       (cl-labels ((check-severity
                    (severity)
                    (not (zerop (aref diags severity)))))
@@ -291,7 +303,7 @@ PATH is the current folder to be checked."
     'lsp-headerline-breadcrumb-path-face))
 
 (defun lsp-headerline--severity-level-for-range (range)
-  "Get the severiy level for RANGE."
+  "Get the severity level for RANGE."
   (let ((range-severity 10))
     (mapc (-lambda ((&Diagnostic :range (&Range :start) :severity?))
             (when (lsp-point-in-range? start range)
@@ -301,7 +313,7 @@ PATH is the current folder to be checked."
 
 (defun lsp-headerline--build-path-up-to-project-string ()
   "Build the path-up-to-project segment for the breadcrumb."
-  (if-let ((root (lsp-workspace-root)))
+  (if-let* ((root (lsp-headerline--workspace-root)))
       (let ((segments (or
                        lsp-headerline--path-up-to-project-segments
                        (setq lsp-headerline--path-up-to-project-segments
@@ -386,7 +398,7 @@ PATH is the current folder to be checked."
                (_ (lsp-log "'%s' is not a valid entry for `lsp-headerline-breadcrumb-segments'"
                            (symbol-name segment))
                   ""))))
-        (if (eq segment-string "")
+        (if (string-empty-p segment-string)
             ""
           (concat (lsp-headerline--arrow-icon)
                   " "
@@ -397,7 +409,7 @@ PATH is the current folder to be checked."
 
 (defun lsp-headerline--check-breadcrumb (&rest _)
   "Request for document symbols to build the breadcrumb."
-  (setq lsp-headerline--string (lsp-headerline--build-string))
+  (set-window-parameter (selected-window) 'lsp-headerline--string (lsp-headerline--build-string))
   (force-mode-line-update))
 
 (defun lsp-headerline--enable-breadcrumb ()
@@ -410,6 +422,10 @@ PATH is the current folder to be checked."
   "Disable headerline breadcrumb mode."
   (lsp-headerline-breadcrumb-mode -1))
 
+(defun lsp-headerline--workspace-root ()
+  (or lsp-headerline--cached-workspace-root
+      (setq lsp-headerline--cached-workspace-root (lsp-workspace-root))))
+
 ;;;###autoload
 (define-minor-mode lsp-headerline-breadcrumb-mode
   "Toggle breadcrumb on headerline."
@@ -417,7 +433,12 @@ PATH is the current folder to be checked."
   :global nil
   (cond
    (lsp-headerline-breadcrumb-mode
-    (add-to-list 'header-line-format '(t (:eval lsp-headerline--string)))
+    ;; make sure header-line-format, if non-nil, is a list.  as
+    ;; mode-line-format says: "The value may be nil, a string, a
+    ;; symbol or a list."
+    (unless (listp header-line-format)
+      (setq header-line-format (list header-line-format)))
+    (add-to-list 'header-line-format '(t (:eval (window-parameter nil 'lsp-headerline--string) )))
 
     (add-hook 'xref-after-jump-hook #'lsp-headerline--check-breadcrumb nil t)
 
@@ -432,7 +453,7 @@ PATH is the current folder to be checked."
     (remove-hook 'xref-after-jump-hook #'lsp-headerline--check-breadcrumb t)
 
     (setq lsp-headerline--path-up-to-project-segments nil)
-    (setq header-line-format (remove '(t (:eval lsp-headerline--string)) header-line-format)))))
+    (setq header-line-format (remove '(t (:eval (window-parameter nil 'lsp-headerline--string) )) header-line-format)))))
 
 ;;;###autoload
 (defun lsp-breadcrumb-go-to-symbol (symbol-position)
