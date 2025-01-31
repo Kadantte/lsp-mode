@@ -30,7 +30,7 @@
 ;; HDL Checker. See https://github.com/suoto/hdl_checker/wiki/setting-up-a-project
 ;; for setting up the project file.
 ;;
-;; VHDL LS. See https://github.com/kraigher/rust_hdl#configuration for setting
+;; VHDL LS. See https://github.com/VHDL-LS/rust_hdl#configuration for setting
 ;; up the project file.
 ;;
 ;; GHDL LS. See https://github.com/ghdl/ghdl-language-server for setting up the
@@ -61,13 +61,23 @@
 
 (defcustom lsp-vhdl-server 'vhdl-tool
   "Select which server to use:
-VHDL-tool: A syntax checking, type checking and linting tool (http://vhdltool.com).
-HDL Checker: A wrapper for third party tools such as GHDL, ModelSim, Vivado Simulator (https://github.com/suoto/hdl_checker).
-VHDL LS: A complete VHDL language server protocol implementation with diagnostics, navigate to symbol, find all references etc. (https://github.com/kraigher/rust_hdl)."
+VHDL-tool: A syntax checking, type checking and linting tool
+\(http://vhdltool.com).
+
+HDL Checker: A wrapper for third party tools such as GHDL,
+ModelSim, Vivado Simulator
+\(https://github.com/suoto/hdl_checker).
+
+VHDL LS: A complete VHDL language server protocol implementation
+with diagnostics, navigate to symbol, find all references etc
+\(https://github.com/VHDL-LS/rust_hdl).
+
+GHDL LS: A LSP server for VHDL based on GHDL
+\(https://github.com/ghdl/ghdl-language-server)."
   :type '(choice (const :tag "VHDL-tool" vhdl-tool)
-		 (const :tag "HDL Checker" hdl-checker)
-		 (const :tag "VHDL LS" vhdl-ls)
-		 (const :tag "GHDL LS" ghdl-ls))
+                 (const :tag "HDL Checker" hdl-checker)
+                 (const :tag "VHDL LS" vhdl-ls)
+                 (const :tag "GHDL LS" ghdl-ls))
   :group 'lsp-vhdl)
 
 (defcustom lsp-vhdl-server-path nil
@@ -79,7 +89,7 @@ VHDL LS: A complete VHDL language server protocol implementation with diagnostic
 (defvar lsp-vhdl--params nil)
 
 (defun lsp-vhdl--create-connection ()
-  "Returns lsp-stdio-connection based on the selected server"
+  "Return lsp-stdio-connection based on the selected server."
   (lsp-vhdl--set-server-path)
   (lsp-vhdl--set-server-args)
   (lsp-stdio-connection
@@ -110,7 +120,7 @@ VHDL LS: A complete VHDL language server protocol implementation with diagnostic
 
 (lsp-register-client
  (make-lsp-client :new-connection (lsp-vhdl--create-connection)
-                  :major-modes '(vhdl-mode)
+                  :major-modes '(vhdl-mode vhdl-ts-mode)
                   :language-id "VHDL"
                   :priority -1
                   :server-id 'lsp-vhdl))

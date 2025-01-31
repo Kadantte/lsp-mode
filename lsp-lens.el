@@ -104,10 +104,9 @@ Results are meaningful only if FROM and TO are on the same line."
   (-doto (save-excursion
            (goto-char pos)
            (if (eq 'end-of-line lsp-lens-place-position)
-               (make-overlay (point-at-eol) -1 nil t t)
-             (make-overlay (point-at-bol) (1+ (point-at-eol)) nil t t)))
+               (make-overlay (line-end-position) -1 nil t t)
+             (make-overlay (line-beginning-position) (1+ (line-end-position)) nil t t)))
     (overlay-put 'lsp-lens t)
-    (overlay-put 'evaporate t)
     (overlay-put 'lsp-lens-position pos)))
 
 (defun lsp-lens--show (str pos metadata)
@@ -249,9 +248,11 @@ version."
                                                      :command?
                                                      :_pending pending))
   "Return t if LENS has to be loaded."
-  (and (< (window-start) (lsp--position-to-point start) (window-end))
-       (not command?)
-       (not pending)))
+  (let ((window (get-buffer-window (current-buffer))))
+    ;; (window-start/end) does not consider current window buffer if not passed manually
+    (and (< (window-start window) (lsp--position-to-point start) (window-end window))
+         (not command?)
+         (not pending))))
 
 (lsp-defun lsp--lens-backend-present? ((&CodeLens :range (&Range :start) :command?))
   "Return t if LENS has to be loaded."
@@ -396,6 +397,7 @@ CALLBACK - callback for the lenses."
 (declare-function avy-process "ext:avy" (candidates &optional overlay-fn cleanup-fn))
 (declare-function avy--key-to-char "ext:avy" (c))
 (defvar avy-action)
+(defvar avy-style)
 
 ;;;###autoload
 (defun lsp-avy-lens ()
@@ -404,6 +406,7 @@ CALLBACK - callback for the lenses."
   (unless lsp-lens--overlays
     (user-error "No lenses in current buffer"))
   (let* ((avy-action 'identity)
+         (avy-style 'lsp-avy-lens)
          (position (if (eq lsp-lens-place-position 'end-of-line)
                        'after-string
                      'before-string))
@@ -437,9 +440,13 @@ CALLBACK - callback for the lenses."
                                        (concat new-str "\n"))))
                        (overlay-put ov position new-str)))
                    (lambda ()
-                     (--map (overlay-put it position
-                                         (overlay-get it 'lsp-original))
-                            lsp-lens--overlays))))))
+                     (--map
+                      (let ((original (overlay-get it 'lsp-original)))
+                        (overlay-put it position
+                                     (if (eq lsp-lens-place-position 'end-of-line)
+                                         (concat " " original)
+                                       original)))
+                      lsp-lens--overlays))))))
     (when action (funcall-interactively action))))
 
 (lsp-consistency-check lsp-lens)

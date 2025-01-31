@@ -1,12 +1,13 @@
 ---
 title: LSP Mode - Language Server Protocol support for Emacs
 description: Language Server Protocol support with multiples languages support for Emacs
+root_file: README.md
 ---
 
 [![](https://melpa.org/packages/lsp-mode-badge.svg)](https://melpa.org/#/lsp-mode)
 [![](https://stable.melpa.org/packages/lsp-mode-badge.svg)](https://stable.melpa.org/#/lsp-mode)
 [![](https://discordapp.com/api/guilds/789885435026604033/widget.png?style=shield)](https://discord.gg/swuxy5AAgT)
-[![](https://github.com/emacs-lsp/lsp-mode/workflows/CI/badge.svg)](https://github.com/emacs-lsp/lsp-mode/actions?query=workflow%3ACI)
+[![CI](https://github.com/emacs-lsp/lsp-mode/actions/workflows/test.yml/badge.svg)](https://github.com/emacs-lsp/lsp-mode/actions/workflows/test.yml)
 
 <img src="examples/logo.png" width="240" align="right">
 
@@ -108,11 +109,19 @@ most popular Emacs packages like `company`, `flycheck` and `projectile`.
 
 ## Contributions
 
-Contributions are very much welcome.
+Contributions are very much welcome!
+
+**NOTE**
+Documentation for clients is generated from doc comments in the clients
+themselves (see
+[lsp-doc.el](https://github.com/emacs-lsp/lsp-mode/blob/master/docs/lsp-doc.el))
+and some metadata (see
+[lsp-clients.json](https://github.com/emacs-lsp/lsp-mode/blob/master/docs/lsp-clients.json))
+so please submit corrections accordingly.
 
 ## Support the project
 
-The `emacs-lsp` organization has more than **20.000 lines of code**, to keep all of this working,
+The `emacs-lsp` organization has more than **20,000 lines of code**, to keep all of this working,
 we need to implement new features and help the community on a lot of issues.
 
 You can help us keep going and improving it by **[supporting the project](https://github.com/sponsors/emacs-lsp)**
@@ -260,6 +269,39 @@ primary working on/responsible for.
         </a>
         <br/>
         lsp-mode core | iedit
+      </div>
+    </td>
+    <td align="center">
+      <div>
+        <a href="https://github.com/psibi">
+          <img src="https://github.com/psibi.png" width="100px;" style="border-radius: 50%;" alt="psibi"/>
+          <br/>
+          <sub><b>psibi</b></sub>
+        </a>
+        <br/>
+        Terraform | Nix
+      </div>
+    </td>
+    <td align="center">
+      <div>
+        <a href="https://github.com/razzmatazz">
+          <img src="https://github.com/razzmatazz.png" width="100px;" style="border-radius: 50%;" alt="razzmatazz"/>
+          <br/>
+          <sub><b>razzmatazz</b></sub>
+        </a>
+        <br/>
+        C# | F#
+      </div>
+    </td>
+    <td align="center">
+      <div>
+        <a href="https://github.com/jcs090218">
+          <img src="https://github.com/jcs090218.png" width="100px;" style="border-radius: 50%;" alt="jcs090218"/>
+          <br/>
+          <sub><b>jcs090218</b></sub>
+        </a>
+        <br/>
+        lsp-mode core
       </div>
     </td>
   </tr>

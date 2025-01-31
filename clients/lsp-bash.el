@@ -33,8 +33,14 @@
   :link '(url-link "https://github.com/bash-lsp/bash-language-server")
   :package-version '(lsp-mode . "6.2"))
 
+(defcustom lsp-bash-allowed-shells '(sh bash)
+  "List of allowed `sh-shell` values that LSP will be enabled for."
+  :type '(list symbol)
+  :group 'lsp-bash
+  :package-version '(lsp-mode . "9.0.1"))
+
 (defcustom lsp-bash-explainshell-endpoint nil
-  "The endpoint to use explainshell.com to answer 'onHover' queries.
+  "The endpoint to use explainshell.com to answer `onHover' queries.
 See instructions at https://marketplace.visualstudio.com/items?itemName=mads-hartmann.bash-ide-vscode"
   :type 'string
   :risky t
@@ -42,7 +48,7 @@ See instructions at https://marketplace.visualstudio.com/items?itemName=mads-har
   :package-version '(lsp-mode . "6.2"))
 
 (defcustom lsp-bash-highlight-parsing-errors nil
-  "Consider parsing errors in scripts as 'problems'."
+  "Consider parsing errors in scripts as `problems'."
   :type 'boolean
   :group 'lsp-bash
   :package-version '(lsp-mode . "6.2"))
@@ -65,15 +71,16 @@ See instructions at https://marketplace.visualstudio.com/items?itemName=mads-har
 (defvar sh-shell)
 
 (defun lsp-bash-check-sh-shell (&rest _)
-  "Check whether `sh-shell' is sh or bash.
+  "Check whether `sh-shell' is supported.
 
-This prevents the Bash server from being turned on in zsh files."
-  (and (eq major-mode 'sh-mode)
-       (memq sh-shell '(sh bash))))
+This prevents the Bash server from being turned on for unsupported dialects, e.g. `zsh`."
+  (and (local-variable-p 'sh-shell)
+       (memq sh-shell lsp-bash-allowed-shells)))
 
 (lsp-register-client
  (make-lsp-client
   :new-connection (lsp-stdio-connection #'lsp-bash--bash-ls-server-command)
+  :major-modes '(sh-mode bash-ts-mode ebuild-mode envrc-file-mode)
   :priority -1
   :activation-fn #'lsp-bash-check-sh-shell
   :environment-fn (lambda ()

@@ -85,37 +85,49 @@
   :link '(url-link "https://github.com/bmewburn/vscode-intelephense")
   :package-version '(lsp-mode . "6.1"))
 
-(defcustom lsp-intelephense-php-version "8.0.1"
+(lsp-defcustom lsp-intelephense-php-version "9.0.0"
   "Minimum version of PHP to refer to. Affects code actions, diagnostic &
 completions."
   :type 'string
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.environment.phpVersion")
 
-(defcustom lsp-intelephense-files-max-size 1000000
+(lsp-defcustom lsp-intelephense-files-max-size 1000000
   "Maximum file size in bytes."
   :type 'number
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.files.maxSize")
 
-(defcustom lsp-intelephense-files-associations
+(lsp-defcustom lsp-intelephense-files-associations
   ["*.php" "*.phtml"]
   "Configure glob patterns to make files available for language
 server features."
   :type '(repeat string)
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.files.associations")
 
-(defcustom lsp-intelephense-files-exclude
+(lsp-defcustom lsp-intelephense-files-exclude
   ["**/.git/**" "**/.svn/**" "**/.hg/**" "**/CVS/**" "**/.DS_Store/**"
    "**/node_modules/**" "**/bower_components/**" "**/vendor/**/{Test,test,Tests,tests}/**"]
   "Configure glob patterns to exclude certain files and folders
 from all language server features."
   :type '(repeat string)
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.files.exclude")
 
-(defcustom lsp-intelephense-stubs
+(lsp-defcustom lsp-intelephense-paths-include
+  []
+  "Configure additional paths outside workspace."
+  :type 'lsp-string-vector
+  :group 'lsp-intelephense
+  :package-version '(lsp-mode . "8.1")
+  :lsp-path "intelephense.environment.includePaths")
+
+(lsp-defcustom lsp-intelephense-stubs
   ["apache" "bcmath" "bz2" "calendar"
    "com_dotnet" "Core" "ctype" "curl" "date" "dba" "dom" "enchant"
    "exif" "fileinfo" "filter" "fpm" "ftp" "gd" "hash" "iconv" "imap" "interbase"
@@ -131,40 +143,53 @@ extensions. The default setting includes PHP core and all
 bundled extensions."
   :type '(repeat string)
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.stubs")
 
-(defcustom lsp-intelephense-completion-insert-use-declaration t
+(lsp-defcustom lsp-intelephense-completion-insert-use-declaration t
   "Use declarations will be automatically inserted for namespaced
 classes, traits, interfaces, functions, and constants."
   :type 'boolean
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.completion.insertUseDeclaration")
 
-(defcustom lsp-intelephense-completion-fully-qualify-global-constants-and-functions nil
+(lsp-defcustom lsp-intelephense-completion-fully-qualify-global-constants-and-functions nil
   "Global namespace constants and functions will be fully
 qualified (prefixed with a backslash)."
   :type 'boolean
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.completion.fullyQualifyGlobalConstantsAndFunctions")
 
-(defcustom lsp-intelephense-completion-trigger-parameter-hints t
+(lsp-defcustom lsp-intelephense-completion-trigger-parameter-hints t
   "Method and function completions will include parentheses and
 trigger parameter hints."
   :type 'boolean
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.2"))
+  :package-version '(lsp-mode . "6.2")
+  :lsp-path "intelephense.completion.triggerParameterHints")
 
-(defcustom lsp-intelephense-completion-max-items 100
+(lsp-defcustom lsp-intelephense-completion-max-items 100
   "The maximum number of completion items returned per request."
   :type 'number
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.2"))
+  :package-version '(lsp-mode . "6.2")
+  :lsp-path "intelephense.completion.maxItems")
 
-(defcustom lsp-intelephense-format-enable t
+(lsp-defcustom lsp-intelephense-format-enable t
   "Enables formatting."
   :type 'boolean
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.format.enable")
+
+(lsp-defcustom lsp-intelephense-format-braces "psr12"
+  "Formatting braces style. psr12, allman or k&r"
+  :type 'string
+  :group 'lsp-intelephense
+  :package-version '(lsp-mode . "8.1")
+  :lsp-path "intelephense.format.braces")
 
 (defcustom lsp-intelephense-licence-key nil
   "Enter your intelephense licence key here to access premium
@@ -173,28 +198,33 @@ features."
   :group 'lsp-intelephense
   :package-version '(lsp-mode . "6.2"))
 
-(defcustom lsp-intelephense-telemetry-enabled nil
+(lsp-defcustom lsp-intelephense-telemetry-enabled nil
   "Anonymous usage and crash data will be sent to Azure
 Application Insights."
   :type 'boolean
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.2"))
+  :package-version '(lsp-mode . "6.2")
+  :lsp-path "intelephense.telemetry.enabled")
 
-(defcustom lsp-intelephense-rename-exclude
+(lsp-defcustom lsp-intelephense-rename-exclude
   ["**/vendor/**"]
   "Glob patterns to exclude files and folders from having symbols
 renamed. Rename operation will fail if references and/or
 definitions are found in excluded files/folders."
   :type '(repeat string)
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.2"))
+  :package-version '(lsp-mode . "6.2")
+  :lsp-path "intelephense.rename.exclude")
 
-(defcustom lsp-intelephense-trace-server "off"
+(lsp-defcustom lsp-intelephense-trace-server "off"
   "Traces the communication between VSCode and the intelephense
 language server."
-  :type '(choice (:tag "off" "messages" "verbose"))
+  :type '(choice (const "off")
+                 (const "messages")
+                 (const "verbose"))
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "6.1")
+  :lsp-path "intelephense.trace.server")
 
 (defcustom lsp-intelephense-storage-path
   (expand-file-name (locate-user-emacs-file "lsp-cache"))
@@ -208,7 +238,7 @@ language server."
   "Optional absolute path to global storage dir."
   :type 'directory
   :group 'lsp-intelephense
-  :package-version '(lsp-mode . "8.0.1"))
+  :package-version '(lsp-mode . "9.0.0"))
 
 (defcustom lsp-intelephense-clear-cache nil
   "Optional flag to clear server state."
@@ -221,21 +251,6 @@ language server."
   :type 'boolean
   :group 'lsp-intelephense
   :package-version '(lsp-mode . "6.3"))
-
-(lsp-register-custom-settings
- '(("intelephense.environment.phpVersion" lsp-intelephense-php-version)
-   ("intelephense.trace.server" lsp-intelephense-trace-server)
-   ("intelephense.rename.exclude" lsp-intelephense-rename-exclude)
-   ("intelephense.telemetry.enabled" lsp-intelephense-telemetry-enabled t)
-   ("intelephense.format.enable" lsp-intelephense-format-enable t)
-   ("intelephense.completion.maxItems" lsp-intelephense-completion-max-items)
-   ("intelephense.completion.triggerParameterHints" lsp-intelephense-completion-trigger-parameter-hints t)
-   ("intelephense.completion.fullyQualifyGlobalConstantsAndFunctions" lsp-intelephense-completion-fully-qualify-global-constants-and-functions t)
-   ("intelephense.completion.insertUseDeclaration" lsp-intelephense-completion-insert-use-declaration t)
-   ("intelephense.stubs" lsp-intelephense-stubs)
-   ("intelephense.files.exclude" lsp-intelephense-files-exclude)
-   ("intelephense.files.associations" lsp-intelephense-files-associations)
-   ("intelephense.files.maxSize" lsp-intelephense-files-max-size)))
 
 (define-obsolete-variable-alias
   'lsp-clients-php-iph-server-command
@@ -275,7 +290,8 @@ language server."
                   :server-id 'iph
                   :download-server-fn (lambda (_client callback error-callback _update?)
                                         (lsp-package-ensure 'intelephense
-                                                            callback error-callback))))
+                                                            callback error-callback))
+                  :synchronize-sections '("intelephense")))
 
 
 ;;; Serenata
@@ -397,7 +413,7 @@ already present."
 (defcustom lsp-phpactor-path nil
   "Path to the `phpactor' command."
   :group 'lsp-phpactor
-  :type "string")
+  :type 'string)
 
 (lsp-register-client
  (make-lsp-client
@@ -426,7 +442,7 @@ already present."
   "Alist mapping extension names to `composer' packages.
 These extensions can be installed using
 `lsp-phpactor-install-extension'."
-  :type '(alist :key-type "string" :value-type "string")
+  :type '(alist :key-type string :value-type string)
   :group 'lsp-phpactor)
 
 (defun lsp-phpactor-install-extension (extension)

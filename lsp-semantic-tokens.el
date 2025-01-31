@@ -71,6 +71,11 @@ associated with the requesting language server."
   :group 'lsp-semantic-tokens
   :type 'boolean)
 
+(defcustom lsp-semantic-tokens-enable-multiline-token-support t
+  "When set to nil, tokens will be truncated after end-of-line."
+  :group 'lsp-semantic-tokens
+  :type 'boolean)
+
 (defface lsp-face-semhl-constant
   '((t :inherit font-lock-constant-face))
   "Face used for semantic highlighting scopes matching constant scopes."
@@ -212,6 +217,11 @@ Unless overridden by a more specific face association."
   "Face used for definition modifier."
   :group 'lsp-semantic-tokens)
 
+(defface lsp-face-semhl-implementation
+  '((t :inherit font-lock-function-name-face :weight bold))
+  "Face used for implementation modifier."
+  :group 'lsp-semantic-tokens)
+
 (defface lsp-face-semhl-default-library
   '((t :inherit font-lock-builtin-face))
   "Face used for defaultLibrary modifier."
@@ -222,7 +232,7 @@ Unless overridden by a more specific face association."
   "Face used for static modifier."
   :group 'lsp-semantic-tokens)
 
-(defvar lsp-semantic-token-faces
+(defvar-local lsp-semantic-token-faces
   '(("comment" . lsp-face-semhl-comment)
     ("keyword" . lsp-face-semhl-keyword)
     ("string" . lsp-face-semhl-string)
@@ -251,9 +261,10 @@ Unless overridden by a more specific face association."
     ("concept" . lsp-face-semhl-interface))
   "Faces to use for semantic tokens.")
 
-(defvar lsp-semantic-token-modifier-faces
+(defvar-local lsp-semantic-token-modifier-faces
   '(("declaration" . lsp-face-semhl-interface)
     ("definition" . lsp-face-semhl-definition)
+    ("implementation" . lsp-face-semhl-implementation)
     ("readonly" . lsp-face-semhl-constant)
     ("static" . lsp-face-semhl-static)
     ("deprecated" . lsp-face-semhl-deprecated)
@@ -266,14 +277,16 @@ Unless overridden by a more specific face association."
 Faces to use for semantic token modifiers if
 `lsp-semantic-tokens-apply-modifiers' is non-nil.")
 
-(defvar lsp-semantic-tokens-capabilities
+(defun lsp--semantic-tokens-capabilities ()
   `((semanticTokens
      . ((dynamicRegistration . t)
         (requests . ((range . t) (full . t)))
         (tokenModifiers . ,(if lsp-semantic-tokens-apply-modifiers
-                               (apply 'vector (mapcar #'car lsp-semantic-token-modifier-faces))
+                               (apply 'vector (mapcar #'car (lsp-semantic-tokens--modifier-faces-for (lsp--workspace-client lsp--cur-workspace))))
                              []))
-        (tokenTypes . ,(apply 'vector (mapcar #'car lsp-semantic-token-faces)))
+        (overlappingTokenSupport . t)
+        (multilineTokenSupport . ,(if lsp-semantic-tokens-enable-multiline-token-support t json-false))
+        (tokenTypes . ,(apply 'vector (mapcar #'car (lsp-semantic-tokens--type-faces-for (lsp--workspace-client lsp--cur-workspace)))))
         (formats . ["relative"])))))
 
 (defvar lsp--semantic-tokens-pending-full-token-requests '()
@@ -443,6 +456,20 @@ If FONTIFY-IMMEDIATELY is non-nil, fontification will be performed immediately
      :cancel-token (format "semantic-tokens-%s" (lsp--buffer-uri)))))
 
 
+;;;###autoload
+(defvar-local semantic-token-modifier-cache (make-hash-table)
+  "A cache of modifier values to the selected fonts.
+This allows whole-bitmap lookup instead of checking each bit. The
+expectation is that usage of modifiers will tend to cluster, so
+we will not have the full range of possible usages, hence a
+tractable hash map.
+
+This is set as buffer-local. It should probably be shared in a
+given workspace/language-server combination.
+
+This cache should be flushed every time any modifier
+configuration changes.")
+
 (defun lsp-semantic-tokens--fontify (old-fontify-region beg-orig end-orig &optional loudly)
   "Apply fonts to retrieved semantic tokens.
 OLD-FONTIFY-REGION is the underlying region fontification function,
@@ -524,14 +551,25 @@ LOUDLY will be forwarded to OLD-FONTIFY-REGION as-is."
                (setq column (+ column (aref data (1+ i))))
                (setq face (aref faces (aref data (+ i 3))))
                (setq text-property-beg (+ line-start-pos column))
-               (setq text-property-end (+ text-property-beg (aref data (+ i 2))))
+               (setq text-property-end
+                     (min (if lsp-semantic-tokens-enable-multiline-token-support
+                              (point-max) (line-end-position))
+                      (+ text-property-beg (aref data (+ i 2)))))
                (when face
                  (put-text-property text-property-beg text-property-end 'face face))
-               (cl-loop for j from 0 to (1- (length modifier-faces)) do
-                        (when (and (aref modifier-faces j)
-                                   (> (logand (aref data (+ i 4)) (lsh 1 j)) 0))
-                          (add-face-text-property text-property-beg text-property-end
-                                                  (aref modifier-faces j))))
+               ;; Deal with modifiers. We cache common combinations of
+               ;; modifiers, storing the faces they resolve to.
+               (let* ((modifier-code (aref data (+ i 4)))
+                      (faces-to-apply (gethash modifier-code semantic-token-modifier-cache 'not-found)))
+                 (when (eq 'not-found faces-to-apply)
+                   (setq faces-to-apply nil)
+                   (cl-loop for j from 0 to (1- (length modifier-faces)) do
+                            (when (and (aref modifier-faces j)
+                                       (> (logand modifier-code (ash 1 j)) 0))
+                              (push (aref modifier-faces j) faces-to-apply)))
+                   (puthash modifier-code faces-to-apply semantic-token-modifier-cache))
+                 (dolist (face faces-to-apply)
+                   (add-face-text-property text-property-beg text-property-end face)))
                when (> current-line line-max-inclusive) return nil)))))
       `(jit-lock-bounds ,beg . ,end)))))
 
@@ -541,14 +579,15 @@ LOUDLY will be forwarded to OLD-FONTIFY-REGION as-is."
   ;; which should minimize those occasions where font-lock region extension extends beyond the
   ;; region covered by our freshly requested tokens (see lsp-mode issue #3154), while still limiting
   ;; requests to fairly small regions even if the underlying buffer is large
-  (lsp--semantic-tokens-request
-   (cons (max (point-min) (- (window-start) (* 5 jit-lock-chunk-size)))
-         (min (point-max) (+ (window-end) (* 5 jit-lock-chunk-size)))) t))
+  (when (lsp-feature? "textDocument/semanticTokensFull")
+    (lsp--semantic-tokens-request
+     (cons (max (point-min) (- (window-start) (* 5 jit-lock-chunk-size)))
+           (min (point-max) (+ (window-end) (* 5 jit-lock-chunk-size)))) t)))
 
 (defun lsp--semantic-tokens-as-defined-by-workspace (workspace)
   "Return plist of token-types and token-modifiers defined by WORKSPACE,
 or nil if none are defined."
-  (when-let ((token-capabilities
+  (when-let* ((token-capabilities
               (or
                (-some->
                    (lsp--registered-capability "textDocument/semanticTokens")
@@ -663,22 +702,29 @@ IS-RANGE-PROVIDER is non-nil when server supports range requests."
                        (lsp-warn "No face has been associated to the %s '%s': consider adding a corresponding definition to %s"
                                  category id varname)) maybe-face)) identifiers)))
 
-(defun lsp-semantic-tokens--replace-alist-values (a b)
-  "Replace alist A values with B ones where available."
-  (-map
-   (-lambda ((ak . av))
-     (cons ak (alist-get ak b av nil #'string=)))
-   a))
+(defun lsp-semantic-tokens--apply-alist-overrides (base overrides discard-defaults)
+  "Merge or replace BASE with OVERRIDES, depending on DISCARD-DEFAULTS.
+For keys present in both alists, the assignments made by
+OVERRIDES will take precedence."
+  (if discard-defaults
+      overrides
+    (let* ((copy-base (copy-alist base)))
+      (mapc (-lambda ((key . value)) (setf (alist-get key copy-base nil nil #'string=) value)) overrides)
+      copy-base)))
 
 (defun lsp-semantic-tokens--type-faces-for (client)
   "Return the semantic token type faces for CLIENT."
-  (lsp-semantic-tokens--replace-alist-values lsp-semantic-token-faces
-                                             (plist-get (lsp--client-semantic-tokens-faces-overrides client) :types)))
+  (lsp-semantic-tokens--apply-alist-overrides
+   lsp-semantic-token-faces
+   (plist-get (lsp--client-semantic-tokens-faces-overrides client) :types)
+   (plist-get (lsp--client-semantic-tokens-faces-overrides client) :discard-default-types)))
 
 (defun lsp-semantic-tokens--modifier-faces-for (client)
   "Return the semantic token type faces for CLIENT."
-  (lsp-semantic-tokens--replace-alist-values lsp-semantic-token-modifier-faces
-                                             (plist-get (lsp--client-semantic-tokens-faces-overrides client) :modifiers)))
+  (lsp-semantic-tokens--apply-alist-overrides
+   lsp-semantic-token-modifier-faces
+   (plist-get (lsp--client-semantic-tokens-faces-overrides client) :modifiers)
+   (plist-get (lsp--client-semantic-tokens-faces-overrides client) :discard-default-modifiers)))
 
 (defun lsp--semantic-tokens-on-refresh (workspace)
   "Clear semantic tokens within all buffers of WORKSPACE,
@@ -730,7 +776,7 @@ refresh in currently active buffer."
 (defun lsp-semantic-tokens--enable ()
   "Enable semantic tokens mode."
   (when (and lsp-semantic-tokens-enable
-             (lsp-feature? "textDocument/semanticTokens"))
+             (lsp-feature? "textDocument/semanticTokensFull"))
     (lsp-semantic-tokens--warn-about-deprecated-setting)
     (lsp-semantic-tokens-mode 1)))
 
@@ -744,11 +790,11 @@ refresh in currently active buffer."
   :group 'lsp-semantic-tokens
   :global nil
   (cond
-   (lsp-semantic-tokens-mode
+   ((and lsp-semantic-tokens-mode (lsp-feature? "textDocument/semanticTokensFull"))
     (add-hook 'lsp-configure-hook #'lsp-semantic-tokens--enable nil t)
     (add-hook 'lsp-unconfigure-hook #'lsp-semantic-tokens--disable nil t)
     (mapc #'lsp--semantic-tokens-initialize-workspace
-          (lsp--find-workspaces-for "textDocument/semanticTokens"))
+          (lsp--find-workspaces-for "textDocument/semanticTokensFull"))
     (lsp--semantic-tokens-initialize-buffer))
    (t
     (remove-hook 'lsp-configure-hook #'lsp-semantic-tokens--enable t)
@@ -798,33 +844,37 @@ refresh in currently active buffer."
 
 This is a debugging tool, and may incur significant performance penalties."
   (setq lsp-semantic-tokens--log '())
-  (defadvice lsp-semantic-tokens--fontify (around advice-tokens-fontify activate)
+  (defun lsp-advice-tokens-fontify (orig-func old-fontify-region beg-orig end-orig &optional loudly)
     (lsp-semantic-tokens--log-buffer-contents 'before)
-    (let ((result ad-do-it))
+    (let ((result (funcall orig-func old-fontify-region beg-orig end-orig loudly)))
       (lsp-semantic-tokens--log-buffer-contents 'after)
       result))
-  (defadvice lsp--semantic-tokens-ingest-full/delta-response
-      (before log-delta-response (response) activate)
+  (advice-add 'lsp-semantic-tokens--fontify :around 'lsp-advice-tokens-fontify)
+
+  (defun lsp-log-delta-response (response)
     (setq lsp-semantic-tokens--prev-response `(:request-type "delta"
                                                :response ,response
                                                :version ,lsp--cur-version)))
-  (defadvice lsp--semantic-tokens-ingest-full-response
-      (before log-full-response (response) activate)
+  (advice-add 'lsp--semantic-tokens-ingest-full/delta-response :before 'lsp-log-delta-response)
+
+  (defun lsp-log-full-response (response)
     (setq lsp-semantic-tokens--prev-response `(:request-type "full"
-                                               :response ,response
-                                               :version ,lsp--cur-version)))
-  (defadvice lsp--semantic-tokens-ingest-range-response
-      (before log-range-response (response) activate)
+                                                             :response ,response
+                                                             :version ,lsp--cur-version)))
+  (advice-add 'lsp--semantic-tokens-ingest-full-response :before 'lsp-log-full-response)
+
+  (defun lsp-log-range-response (response)
     (setq lsp-semantic-tokens--prev-response `(:request-type "range"
                                                :response ,response
-                                               :version ,lsp--cur-version))))
+                                               :version ,lsp--cur-version)))
+  (advice-add 'lsp--semantic-tokens-ingest-range-response :before 'lsp-log-range-response))
 
 (defun lsp-semantic-tokens-disable-log ()
   "Disable logging of intermediate fontification states."
-  (ad-unadvise 'lsp-semantic-tokens--fontify)
-  (ad-unadvise 'lsp--semantic-tokens-ingest-full/delta-response)
-  (ad-unadvise 'lsp--semantic-tokens-ingest-full-response)
-  (ad-unadvise 'lsp--semantic-tokens-ingest-range-response))
+  (advice-remove 'lsp-semantic-tokens--fontify 'lsp-advice-tokens-fontify)
+  (advice-remove 'lsp--semantic-tokens-ingest-full/delta-response 'lsp-log-delta-response)
+  (advice-remove 'lsp--semantic-tokens-ingest-full-response 'lsp-log-full-response)
+  (advice-remove 'lsp--semantic-tokens-ingest-range-response 'lsp-log-range-response))
 
 (declare-function htmlize-buffer "ext:htmlize")
 

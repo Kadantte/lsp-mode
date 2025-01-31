@@ -56,10 +56,9 @@
    Always: wrap prose if it exceeds the print width.
    Never: never wrap the prose.
    Preserve: wrap prose as-is."
-  :type '(choice
-          (const "always")
-          (const "never")
-          (const "preserve"))
+  :type '(choice (const "always")
+                 (const "never")
+                 (const "preserve"))
   :group 'lsp-yaml
   :package-version '(lsp-mode . "6.2"))
 
@@ -111,10 +110,10 @@
   :type 'string
   :group 'lsp-yaml)
 
-(defcustom lsp-yaml-schema-store-local-db (expand-file-name
-                                           (locate-user-emacs-file
-                                            (f-join ".cache" "lsp" "lsp-yaml-schemas.json")))
-  "Cached databse of schema store."
+(defcustom lsp-yaml-schema-store-local-db
+  (expand-file-name
+   (locate-user-emacs-file (f-join ".cache" "lsp" "lsp-yaml-schemas.json")))
+  "Cached database of schema store."
   :type 'file
   :group 'lsp-yaml)
 
@@ -161,7 +160,7 @@ Limited for performance reasons."
                                      `(,(or (executable-find (cl-first lsp-yaml-server-command))
                                             (lsp-package-path 'yaml-language-server))
                                        ,@(cl-rest lsp-yaml-server-command))))
-                  :major-modes '(yaml-mode k8s-mode)
+                  :activation-fn (lsp-activate-on "yaml")
                   :priority 0
                   :server-id 'yamlls
                   :initialized-fn (lambda (workspace)
@@ -172,19 +171,30 @@ Limited for performance reasons."
                                         (lsp-package-ensure 'yaml-language-server
                                                             callback error-callback))))
 
-(defconst lsp-yaml--built-in-kubernetes-schema
-  '((name . "Kubernetes")
-    (description . "Built-in kubernetes manifest schema definition")
-    (url . "kubernetes")
-    (fileMatch . ["*-k8s.yaml" "*-k8s.yml"])))
+(defconst lsp--yaml-schema-extension-type
+  '(list (cons 'name  string)
+         (cons 'description string)
+         (cons 'url string)
+         (cons 'fileMatch (repeat string))))
+
+(defcustom lsp-yaml-schema-extensions '(((name . "Kubernetes v1.30.3")
+                                         (description . "Kubernetes v1.30.3 manifest schema definition")
+                                         (url . "https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/v1.30.3-standalone-strict/all.json")
+                                         (fileMatch . ["*-k8s.yaml" "*-k8s.yml"])))
+  "User defined schemas that extend default schema store.
+Used in `lsp-yaml--get-supported-schemas' to supplement schemas provided by
+`lsp-yaml-schema-store-uri'."
+  :type  '(repeat lsp--yaml-schema-extension-type)
+  :group 'lsp-yaml
+  :package-version '(lsp-mode . "9.0.1"))
 
 (defun lsp-yaml-download-schema-store-db (&optional force-downloading)
-  "Download the remote schema store at `lsp-yaml-schema-store-uri' into local cache.
+  "Download remote schema store at `lsp-yaml-schema-store-uri' into local cache.
 Set FORCE-DOWNLOADING to non-nil to force re-download the database."
   (interactive "P")
   (when (or force-downloading (not (file-exists-p lsp-yaml-schema-store-local-db)))
     (unless (file-directory-p (file-name-directory lsp-yaml-schema-store-local-db))
-      (mkdir (file-name-directory lsp-yaml-schema-store-local-db)))
+      (mkdir (file-name-directory lsp-yaml-schema-store-local-db) t))
     (url-copy-file lsp-yaml-schema-store-uri lsp-yaml-schema-store-local-db force-downloading)))
 
 (defun lsp-yaml--get-supported-schemas ()
@@ -194,7 +204,7 @@ Set FORCE-DOWNLOADING to non-nil to force re-download the database."
     (lsp-yaml-download-schema-store-db)
     (setq lsp-yaml--schema-store-schemas-alist
           (alist-get 'schemas (json-read-file lsp-yaml-schema-store-local-db))))
-  (seq-concatenate 'list (list lsp-yaml--built-in-kubernetes-schema) lsp-yaml--schema-store-schemas-alist))
+  (seq-concatenate 'list lsp-yaml-schema-extensions lsp-yaml--schema-store-schemas-alist))
 
 (defun lsp-yaml-set-buffer-schema (uri-string)
   "Set yaml schema for the current buffer to URI-STRING."

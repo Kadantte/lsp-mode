@@ -36,11 +36,12 @@
 
 (ert-deftest lsp-completion-test-fuz-score ()
   (cl-labels ((do-test (query cands expected)
-                       (should (equal
-                                (sort cands
-                                      (lambda (l r) (> (lsp-completion--fuz-score query l)
-                                                       (lsp-completion--fuz-score query r))))
-                                expected))))
+                (let ((completion-ignore-case t))
+                  (should (equal
+                           (sort cands
+                                 (lambda (l r) (> (or (lsp-completion--fuz-score query l) 0)
+                                                  (or (lsp-completion--fuz-score query r) 0))))
+                           expected)))))
     (do-test "as"
              '("hashCode() : int"
                "asSubclass(Class<U> clazz) : Class<? extends U>")
@@ -80,11 +81,11 @@
              '("F" "daFo" "safo")
              '("F" "daFo" "safo"))))
 
-(ert-deftest lsp-completion-test-get-context ()
+(ert-deftest lsp-completion-test-get-context-trigger-characters-no-cache ()
   (setq lsp-completion--cache nil)
   (cl-labels ((do-get-context (arg)
                               (let ((non-essential arg))
-                                (lsp-completion--get-context '("_"))))
+                                (lsp-completion--get-context '("_") nil)))
               (do-test-trigger-kind (arg)
                                     (lsp:completion-context-trigger-kind
                                      (do-get-context arg)))
@@ -102,5 +103,31 @@
       (should (equal (do-test-trigger-kind t) 2))
       (should (equal (do-test-trigger-character t) "_")))))
 
-(provide 'lsp-completion-test)
+(ert-deftest lsp-completion-test-get-context-incomplete-completion ()
+  (setq lsp-completion--cache (list "not-used" :incomplete))
+  (cl-labels ((do-get-context (arg same-session?)
+                              (let ((non-essential arg))
+                                (lsp-completion--get-context '("_") same-session?)))
+              (do-test-trigger-kind (arg same-session?)
+                                    (lsp:completion-context-trigger-kind
+                                     (do-get-context arg same-session?))))
+    (mocklet ((lsp-completion--looking-back-trigger-characterp))
+      ;; When the user manually invokes completion,
+      (should (equal (do-test-trigger-kind nil nil) 1)) ;; and the session is different: expect a new completion
+      (should (equal (do-test-trigger-kind nil t) 3)) ;; and the session is the same: expect a continued completion
+
+      ;; When the user is typing a non-trigger character into the buffer,
+      (should (equal (do-test-trigger-kind t nil) 1)) ;; and the session is different: expect a new completion
+      (should (equal (do-test-trigger-kind t t) 3))) ;; and the session is the same: expect a continued completion
+
+    (mocklet ((lsp-completion--looking-back-trigger-characterp => "_"))
+      ;; When the user manually invokes completion,
+      (should (equal (do-test-trigger-kind nil nil) 1)) ;; and the session is different: expect a new completion
+      (should (equal (do-test-trigger-kind nil t) 3)) ;; and the session is the same: expect a continued completion
+
+      ;; When the user is typing a trigger-character into the buffer,
+      (should (equal (do-test-trigger-kind t nil) 2)) ;; and the session is different: expect a new trigger-character completion
+      (should (equal (do-test-trigger-kind t t) 2))) ;; and the session is the same: expect a new trigger-character completion
+    ))
+
 ;;; lsp-completion-test.el ends here

@@ -38,6 +38,12 @@
   :group 'lsp-sorbet
   :package-version '(lsp-mode . "8.0.0"))
 
+(defcustom lsp-sorbet-as-add-on nil
+  "Run sorbet LSP server alongside other LSP server(s)"
+  :type 'boolean
+  :group 'lsp-sorbet
+  :package-version '(lsp-mode . "8.0.0"))
+
 (defun lsp-sorbet--build-command ()
   "Build sorbet command"
   (let ((lsp-command '("srb" "typecheck" "--lsp" "--disable-watchman")))
@@ -47,10 +53,11 @@
 
 (lsp-register-client
  (make-lsp-client
+  :add-on? lsp-sorbet-as-add-on
   :new-connection (lsp-stdio-connection
                    #'lsp-sorbet--build-command)
   :priority -2
-  :major-modes '(ruby-mode enh-ruby-mode)
+  :activation-fn (lsp-activate-on "ruby")
   :server-id 'sorbet-ls))
 
 (lsp-consistency-check lsp-sorbet)

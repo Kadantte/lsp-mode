@@ -217,7 +217,8 @@ opening bracket's line."
 (defcustom lsp-pyls-plugins-pydocstyle-convention nil
   "Choose the basic list of checked errors by specifying an
 existing convention."
-  :type '(choice (:tag "pep257" "numpy"))
+  :type '(choice (const "pep257")
+                 (const "numpy"))
   :group 'lsp-pyls
   :package-version '(lsp-mode . "6.1"))
 
@@ -250,7 +251,7 @@ convention."
 (defcustom lsp-pyls-plugins-pydocstyle-match "(?!test_).*\\.py"
   "Check only files that exactly match the given regular
 expression; default is to match files that don't start with
-'test_' but end with '.py'."
+`test_' but end with `.py'."
   :type 'string
   :group 'lsp-pyls
   :package-version '(lsp-mode . "6.1"))
@@ -486,7 +487,7 @@ So it will rename only references it can find."
 (lsp-register-client
  (make-lsp-client :new-connection (lsp-stdio-connection
                                    (lambda () lsp-clients-python-command))
-                  :major-modes '(python-mode cython-mode)
+                  :activation-fn (lsp-activate-on "python")
                   :priority -2
                   :server-id 'pyls
                   :library-folders-fn (lambda (_workspace) lsp-clients-python-library-directories)

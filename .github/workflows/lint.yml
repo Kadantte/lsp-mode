@@ -10,29 +10,24 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - uses: purcell/setup-emacs@master
         with:
-          version: snapshot
+          version: 27.1
 
-      - uses: actions/setup-python@v2
+      - uses: emacs-eask/setup-eask@master
         with:
-          python-version: "3.6"
-          architecture: "x64"
-
-      - uses: conao3/setup-cask@master
-        with:
-          version: 0.8.4
+          version: 'snapshot'
 
       - name: Resolve dependency
-        run: cask install
+        run: eask install-deps --dev
 
       - name: Run Indentation Lint
         run: |
           git diff-tree --no-commit-id --name-only -r ${{ github.sha }} \
           | grep \.el | grep -v \.dir-locals\.el \
-          | xargs -t -I^ cask emacs -q --batch ^ --eval "\
+          | xargs -t -I^ eask emacs -q --batch ^ --eval "\
               (let ((require-final-newline t)) \
                 (require 'flycheck) \
                 (eval-buffer) \

@@ -18,22 +18,25 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+;;; Commentary:
+
 ;;; Code:
 
 (require 'lsp-mode)
 
 (defgroup lsp-html nil
-  "LSP support for HTML, using vscode-html-languageserver."
+  "LSP support for HTML, using vscode's built-in language server."
   :group 'lsp-mode
-  :link '(url-link "https://github.com/vscode-langservers/vscode-html-languageserver")
+  :link '(url-link "https://github.com/microsoft/vscode/tree/main/extensions/html-language-features/server")
   :package-version '(lsp-mode . "6.1"))
 
-(defcustom lsp-html-experimental-custom-data nil
+(defcustom lsp-html-custom-data []
   "A list of JSON file paths that define custom tags, properties and other HTML
-syntax constructs. Only workspace folder setting will be read."
-  :type '(choice (const nil) string)
+syntax constructs. Only workspace folder setting will be read.
+All json file paths should be relative to your workspace folder."
+  :type 'lsp-repeatable-vector
   :group 'lsp-html
-  :package-version '(lsp-mode . "6.1"))
+  :package-version '(lsp-mode . "9.0.0"))
 
 (defcustom lsp-html-format-enable t
   "Enable/disable default HTML formatter."
@@ -135,6 +138,18 @@ styles."
   :group 'lsp-html
   :package-version '(lsp-mode . "6.1"))
 
+(defcustom lsp-html-hover-documentation t
+  "Whether to show documentation strings on hover or not."
+  :type 'boolean
+  :group 'lsp-html
+  :package-version '(lsp-mode . "9.0.0"))
+
+(defcustom lsp-html-hover-references t
+  "Whether to show MDN references in documentation popups."
+  :type 'boolean
+  :group 'lsp-html
+  :package-version '(lsp-mode . "9.0.0"))
+
 (defcustom lsp-html-trace-server "off"
   "Traces the communication between VS Code and the HTML language server."
   :type '(choice
@@ -161,7 +176,9 @@ styles."
    ("html.format.unformatted" lsp-html-format-unformatted)
    ("html.format.wrapLineLength" lsp-html-format-wrap-line-length)
    ("html.format.enable" lsp-html-format-enable t)
-   ("html.experimental.customData" lsp-html-experimental-custom-data)))
+   ("html.hover.documentation" lsp-html-hover-documentation t)
+   ("html.hover.references" lsp-html-hover-references t)
+   ("html.customData" lsp-html-custom-data)))
 
 (defcustom lsp-html-server-command-args '("--stdio")
   "Command to start html-languageserver."
@@ -169,10 +186,18 @@ styles."
   :group 'lsp-html
   :package-version '(lsp-mode . "6.3"))
 
+;; Caveat: uri seems to be sent as a single length vector.
+(defun lsp-html--get-content (_workspace files callback)
+  "Helper function for getting the content of a URI/filename."
+  (let* ((filename (aref files 0))
+         (uri (f-join (lsp-workspace-root) filename))
+         (file-content (f-read-text uri)))
+    (funcall callback file-content)))
+
 (lsp-dependency 'html-language-server
-                '(:system "html-languageserver")
-                '(:npm :package "vscode-html-languageserver-bin"
-                       :path "html-languageserver"))
+                '(:system "vscode-html-language-server")
+                '(:npm :package "vscode-langservers-extracted"
+                       :path "vscode-html-language-server"))
 
 (lsp-register-client
  (make-lsp-client :new-connection (lsp-stdio-connection
@@ -183,6 +208,9 @@ styles."
                   :priority -4
                   :completion-in-comments? t
                   :server-id 'html-ls
+                  :initialization-options (lambda ()
+                                            (list :dataPaths lsp-html-custom-data))
+                  :async-request-handlers (ht ("html/customDataContent" #'lsp-html--get-content))
                   :initialized-fn (lambda (w)
                                     (with-lsp-workspace w
                                       (lsp--set-configuration

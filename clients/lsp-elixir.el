@@ -68,7 +68,7 @@ If value is `\"\"` then defaults to the workspace rootUri."
   :group 'lsp-elixir
   :package-version '(lsp-mode . "8.0.0"))
 
-(defcustom lsp-elixir-fetch-deps t
+(defcustom lsp-elixir-fetch-deps nil
   "Automatically fetch project dependencies when compiling."
   :type 'boolean
   :group 'lsp-elixir
@@ -104,6 +104,22 @@ Leave as default to let `executable-find' search for it."
   :group 'lsp-elixir
   :type '(repeat string)
   :package-version '(lsp-mode . "8.0.0"))
+
+(defcustom lsp-elixir-ls-version "v0.25.0"
+  "Elixir-Ls version to download.
+It has to be set before `lsp-elixir.el' is loaded and it has to
+be available here: https://github.com/elixir-lsp/elixir-ls/releases/"
+  :type 'string
+  :group 'lsp-elixir
+  :package-version '(lsp-mode . "9.0.0"))
+
+(defcustom lsp-elixir-ls-download-url
+  (format "https://github.com/elixir-lsp/elixir-ls/releases/download/%1$s/elixir-ls-%1$s.zip"
+          lsp-elixir-ls-version)
+  "Automatic download url for elixir-ls."
+  :type 'string
+  :group 'lsp-elixir
+  :package-version '(lsp-mode . "9.0.0"))
 
 
 (defconst lsp-elixir-ls-server-dir
@@ -145,8 +161,13 @@ Leave as default to let `executable-find' search for it."
              " --no-color"))
     file-path))
 
-(lsp-dependency 'elixir-ls
-                '(:system "elixir-ls"))
+(lsp-dependency
+ 'elixir-ls
+ `(:download :url lsp-elixir-ls-download-url
+             :decompress :zip
+             :store-path ,(f-join lsp-server-install-dir "elixir-ls" "elixir-ls.zip")
+             :binary-path lsp-elixir-server-command
+             :set-executable? t))
 
 (lsp-register-custom-settings
  '(("elixirLS.dialyzerEnabled" lsp-elixir-dialyzer-enabled t)
@@ -170,19 +191,22 @@ Leave as default to let `executable-find' search for it."
                                                 (lsp-package-path 'elixir-ls))
                                             "language_server.bat")
                                        ,@(cl-rest lsp-elixir-server-command))))
-                  :major-modes '(elixir-mode)
+                  :activation-fn (lsp-activate-on "elixir")
                   :priority -1
                   :server-id 'elixir-ls
                   :action-handlers (ht ("elixir.lens.test.run" 'lsp-elixir--run-test))
+                  :download-server-fn (lambda (_client callback error-callback _update?)
+                                        (lsp-package-ensure 'elixir-ls callback error-callback))
                   :initialized-fn (lambda (workspace)
                                     (with-lsp-workspace workspace
                                       (lsp--set-configuration
                                        (lsp-configuration-section "elixirLS")))
-                                    (puthash
-                                     "textDocumentSync"
-                                     (ht ("save" t)
-                                         ("change" 2))
-                                     (lsp--workspace-server-capabilities workspace)))))
+                                    (lsp-put
+                                     (lsp--workspace-server-capabilities workspace)
+                                     :textDocumentSync
+                                     (lsp-make-text-document-sync-options
+                                      :save t
+                                      :change 2)))))
 
 (lsp-consistency-check lsp-elixir)
 

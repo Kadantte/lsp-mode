@@ -25,6 +25,8 @@
 ;;; Code:
 
 (require 'lsp-mode)
+(require 'cl-lib)
+(require 'dash)
 
 (defgroup lsp-kotlin nil
   "LSP support for Kotlin, using KotlinLanguageServer."
@@ -48,7 +50,9 @@ executable with `exec-path'."
 
 (defcustom lsp-kotlin-trace-server "off"
   "Traces the communication between VSCode and the Kotlin language server."
-  :type '(choice (:tag "off" "messages" "verbose"))
+  :type '(choice (const "off")
+                 (const "messages")
+                 (const "verbose"))
   :group 'lsp-kotlin
   :package-version '(lsp-mode . "6.1"))
 
@@ -85,7 +89,7 @@ When enabled a debugger for Kotlin will be available."
 
 (defcustom lsp-kotlin-external-sources-use-kls-scheme t
   "[Recommended] Specifies whether URIs inside JARs should be represented
-using the 'kls'-scheme."
+using the `kls'-scheme."
   :type 'boolean
   :group 'lsp-kotlin
   :package-version '(lsp-mode . "6.1"))
@@ -102,7 +106,50 @@ to Kotlin."
   "The URL for the language server download."
   :type 'string
   :group 'lsp-kotlin
-  :package-version '(lsp-mode . "8.0.1"))
+  :package-version '(lsp-mode . "9.0.0"))
+
+(defcustom lsp-kotlin-workspace-dir (expand-file-name (locate-user-emacs-file "workspace/"))
+  "LSP kotlin workspace directory."
+  :group 'lsp-kotlin
+  :risky t
+  :type 'directory)
+
+(defcustom lsp-kotlin-workspace-cache-dir (expand-file-name ".cache/" lsp-kotlin-workspace-dir)
+  "LSP kotlin workspace cache directory."
+  :group 'lsp-kotlin
+  :risky t
+  :type 'directory)
+
+;; cache in this case is the dependency cache. Given as an initialization option.
+(defcustom lsp-kotlin-ondisk-cache-path nil
+  "Path to the ondisk cache if used. If lsp-kotlin-ondisk-cache-enabled is t,
+but path is nil, then the project root is used as a default."
+  :type 'string
+  :group 'lsp-kotlin)
+
+(defcustom lsp-kotlin-ondisk-cache-enabled nil
+  "Specifies whether to enable ondisk cache or not.  If nil, in-memory cache
+will be used."
+  :type 'boolean
+  :group 'lsp-kotlin)
+
+(defcustom lsp-kotlin-inlayhints-enable-typehints t
+  "Specifies whether to enable type hints or not.
+Requires lsp-inlay-hints-mode."
+  :type 'boolean
+  :group 'lsp-kotlin)
+
+(defcustom lsp-kotlin-inlayhints-enable-parameterhints t
+  "Specifies whether to enable parameter hints or not.
+Requires lsp-inlay-hints-mode."
+  :type 'boolean
+  :group 'lsp-kotlin)
+
+(defcustom lsp-kotlin-inlayhints-enable-chainedhints t
+  "Specifies whether to enable chained hints or not.
+Requires lsp-inlay-hints-mode."
+  :type 'boolean
+  :group 'lsp-kotlin)
 
 (lsp-register-custom-settings
  '(("kotlin.externalSources.autoConvertToKotlin" lsp-kotlin-external-sources-auto-convert-to-kotlin t)
@@ -113,7 +160,10 @@ to Kotlin."
    ("kotlin.linting.debounceTime" lsp-kotlin-linting-debounce-time)
    ("kotlin.compiler.jvm.target" lsp-kotlin-compiler-jvm-target)
    ("kotlin.trace.server" lsp-kotlin-trace-server)
-   ("kotlin.languageServer.path" lsp-clients-kotlin-server-executable)))
+   ("kotlin.languageServer.path" lsp-clients-kotlin-server-executable)
+   ("kotlin.inlayHints.typeHints" lsp-kotlin-inlayhints-enable-typehints t)
+   ("kotlin.inlayHints.parameterHints" lsp-kotlin-inlayhints-enable-parameterhints t)
+   ("kotlin.inlayHints.chainedHints" lsp-kotlin-inlayhints-enable-chainedhints t)))
 
 (defvar lsp-kotlin--language-server-path
   (f-join lsp-server-install-dir
@@ -122,24 +172,177 @@ to Kotlin."
                                     "kotlin-language-server"))
   "The path to store the language server at if necessary.")
 
+
+;; Debug and running
+(declare-function dap-debug "ext:dap-mode" (template) t)
+
+(defun lsp-kotlin-run-main (main-class project-root debug?)
+  (require 'dap-kotlin)
+  (dap-debug (list :type "kotlin"
+                   :request "launch"
+                   :mainClass main-class
+                   :projectRoot project-root
+                   :noDebug (not debug?))))
+
+(defun lsp-kotlin-lens-backend (_modified? callback)
+  (when lsp-kotlin-debug-adapter-enabled
+    (lsp-request-async
+     "kotlin/mainClass"
+     (list :uri (lsp--buffer-uri))
+     (lambda (mainInfo)
+       (let ((main-class (lsp-get mainInfo :mainClass))
+             (project-root (lsp-get mainInfo :projectRoot))
+             (range (lsp-get mainInfo :range)))
+         (funcall callback
+                  (list (lsp-make-code-lens :range range
+                                            :command
+                                            (lsp-make-command
+                                             :title "Run"
+                                             :command (lambda ()
+                                                        (interactive)
+                                                        (lsp-kotlin-run-main main-class project-root nil))))
+                        (lsp-make-code-lens :range range
+                                            :command
+                                            (lsp-make-command
+                                             :title "Debug"
+                                             :command (lambda ()
+                                                        (interactive)
+                                                        (lsp-kotlin-run-main main-class project-root t)))))
+                  lsp--cur-version)))
+     :mode 'tick)))
+
+(defvar lsp-lens-backends)
+(declare-function lsp-lens-refresh "lsp-lens" (buffer-modified? &optional buffer))
+
+(define-minor-mode lsp-kotlin-lens-mode
+  "Toggle run/debug overlays."
+  :group 'lsp-kotlin
+  :global nil
+  :init-value nil
+  :lighter nil
+  (cond
+   (lsp-kotlin-lens-mode
+    (require 'lsp-lens)
+    ;; set lens backends so they are available is lsp-lens-mode is activated
+    ;; backend does not support lenses, and block our other ones from showing. When backend support lenses again, we can use cl-pushnew to add it to lsp-lens-backends instead of overwriting
+    (setq-local lsp-lens-backends (list #'lsp-kotlin-lens-backend))
+    (lsp-lens-refresh t))
+   (t (setq-local lsp-lens-backends (delete #'lsp-kotlin-lens-backend lsp-lens-backends)))))
+
+
+;; Stolen from lsp-java:
+;; https://github.com/emacs-lsp/lsp-java/blob/a1aff851bcf4f397f2a968557d213db1fede0c8a/lsp-java.el#L1065
+(declare-function helm-make-source "ext:helm-source")
+(defvar lsp-kotlin--helm-result nil)
+(defun lsp-kotlin--completing-read-multiple (message items initial-selection)
+  (if (functionp 'helm)
+      (progn
+        (require 'helm-source)
+        (helm :sources (helm-make-source
+                        message 'helm-source-sync :candidates items
+                        :action '(("Identity" lambda (_)
+                                   (setq lsp-kotlin--helm-result (helm-marked-candidates)))))
+              :buffer "*lsp-kotlin select*"
+              :prompt message)
+        lsp-kotlin--helm-result)
+    (if (functionp 'ivy-read)
+        (let (result)
+          (ivy-read message (mapcar #'car items)
+                    :action (lambda (c) (setq result (list (cdr (assoc c items)))))
+                    :multi-action
+                    (lambda (candidates)
+                      (setq result (mapcar (lambda (c) (cdr (assoc c items))) candidates))))
+          result)
+      (let ((deps initial-selection) dep)
+        (while (setq dep (cl-rest (lsp--completing-read
+                                   (if deps
+                                       (format "%s (selected %s): " message (length deps))
+                                     (concat message ": "))
+                                   items
+                                   (-lambda ((name . id))
+                                     (if (-contains? deps id)
+                                         (concat name " ✓")
+                                       name)))))
+          (if (-contains? deps dep)
+              (setq deps (remove dep deps))
+            (cl-pushnew dep deps)))
+        deps))))
+
+(defun lsp-kotlin-implement-member ()
+  (interactive)
+  (lsp-request-async
+   "kotlin/overrideMember"
+   (list :textDocument (list :uri (lsp--buffer-uri))
+         :position (lsp--cur-position))
+   (lambda (member-options)
+     (-if-let* ((option-items (-map (lambda (x)
+                                      (list (lsp-get x :title)
+                                            (lsp-get (lsp-get (lsp-get x :edit)
+                                                              :changes)
+                                                     (intern (concat ":" (lsp--buffer-uri))))))
+                                    member-options))
+                (selected-members (lsp-kotlin--completing-read-multiple "Select overrides" option-items nil)))
+         (dolist (edit (-flatten selected-members))
+           (lsp--apply-text-edits edit))))))
+
+(defun lsp-kotlin--parse-uri (uri)
+  "Get the path for where we'll store the file, calculating it based on URI."
+  (or (save-match-data
+        (when (string-match "kls:file:///\\(.*\\)!/\\(.*\.\\(class\\|java\\|kt\\)\\)?.*" uri)
+          (let* ((jar-path (match-string 1 uri))
+                 (file-path (match-string 2 uri))
+                 (lib-name (string-join (last (split-string jar-path "/") 2) "."))
+                 (buffer-name (replace-regexp-in-string "/" "." file-path t t))
+                 (file-location (expand-file-name (concat lsp-kotlin-workspace-cache-dir "/" lib-name "/" buffer-name))))
+            file-location)))
+      (error "Unable to match %s" uri)))
+
+(defun lsp-kotlin--uri-handler (uri)
+  "Load a file corresponding to URI executing request to the kotlin server."
+  (let ((file-location (lsp-kotlin--parse-uri uri)))
+    (unless (file-readable-p file-location)
+      (lsp-kotlin--ensure-dir (file-name-directory file-location))
+      (with-lsp-workspace (lsp-find-workspace 'kotlin-ls nil)
+        (let ((content (lsp-send-request (lsp-make-request
+                                          "kotlin/jarClassContents"
+                                          (list :uri uri)))))
+          (with-temp-file file-location
+            (insert content)))))
+    file-location))
+
+(defun lsp-kotlin--ensure-dir (path)
+  "Ensure that directory PATH exists."
+  (unless (file-directory-p path)
+    (make-directory path t)))
+
 (lsp-dependency
  'kotlin-language-server
  `(:system ,lsp-clients-kotlin-server-executable)
  `(:download :url lsp-kotlin-server-download-url
              :decompress :zip
-             :store-path ,(f-join lsp-server-install-dir "kotlin" "kotlin-language-server")
-             :binary-path lsp-kotlin--language-server-path
+             :store-path ,(f-join lsp-server-install-dir "kotlin" "kotlin-language-server.zip")
+             :binary-path lsp-clients-kotlin-server-executable
              :set-executable? t))
 
 (lsp-register-client
  (make-lsp-client
-  :new-connection (lsp-stdio-connection lsp-clients-kotlin-server-executable)
-  :major-modes '(kotlin-mode)
+  :new-connection (lsp-stdio-connection (lambda ()
+                                          `(,(or (when (f-exists? lsp-kotlin--language-server-path)
+                                                   lsp-kotlin--language-server-path)
+                                                 (or (executable-find lsp-clients-kotlin-server-executable)
+                                                     (lsp-package-path 'kotlin-language-server))
+                                                 "kotlin-language-server"))))
+  :major-modes '(kotlin-mode kotlin-ts-mode)
   :priority -1
   :server-id 'kotlin-ls
+  :uri-handlers (lsp-ht ("kls" #'lsp-kotlin--uri-handler))
   :initialized-fn (lambda (workspace)
                     (with-lsp-workspace workspace
                       (lsp--set-configuration (lsp-configuration-section "kotlin"))))
+  :initialization-options (lambda ()
+                            (when lsp-kotlin-ondisk-cache-enabled
+                              (list :storagePath (or lsp-kotlin-ondisk-cache-path
+                                                     (lsp-workspace-root)))))
   :download-server-fn (lambda (_client callback error-callback _update?)
                         (lsp-package-ensure 'kotlin-language-server callback error-callback))))
 
